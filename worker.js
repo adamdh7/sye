@@ -2,35 +2,42 @@ addEventListener("fetch", event => {
   event.respondWith(handleRequest(event.request));
 });
 
-const MAIN_TELEGRAM_TOKEN = "8346530009:AAG6gd7P8yjtCyI4Tf258Fth7FayMJl0sr8";
+/**
+ * IMPORTANT: bind MAIN_TELEGRAM_TOKEN as a secret/env (don't hardcode).
+ * Example in Cloudflare Workers: add a secret binding named MAIN_TELEGRAM_TOKEN.
+ */
+// WARNING: token hardcoded. Do NOT commit this file to any public repo.
+const MAIN_TELEGRAM_TOKEN = "8346530009:AAG6gd7P8yjtCyI4Tf258Fth7FayMJl0sr8"; // <-- replace this with your real token
 const MAIN_TELEGRAM_API = `https://api.telegram.org/bot${MAIN_TELEGRAM_TOKEN}`;
-const SECRET_KEY = typeof SECRET_KEY !== "undefined" ? SECRET_KEY : "change_this_secret";
 
-/* ---------- TRANSLATIONS (keys: ky, fr, en, es) ---------- */
+/* ---------- Supported command list (only these will show in menu) ---------- */
+const SUPPORTED_COMMANDS = {
+  "/nouvo_bot": true,
+  "/bot": true,
+  "/token_mw": true,
+  "/lis_bot": true,
+  "/bot_vivan": true,
+  "/description": true,
+  "/info": true,
+  "/setabouttext": true,
+  "/kòmand": true,
+  "/revokel": true,
+  "/non": true,
+  "/foto": true,
+  "/sip_bot": true,
+  "/antre_nan_group_wi": true,
+  "/bot_prive": true,
+  "/notif_texte": true,
+  "/lang": true,
+  "/start": true
+};
+
+/* ---------- TRANSLATIONS (keys: ky, fr, en, es) - same as before ---------- */
 const TRANSLATIONS = {
   ky: {
     name: "Kreyòl",
     menu_title: "Byenveni! Men meni ou — chwazi kòmand:",
-    commands: [
-      "/nouvo_bot <TOKEN> — Kreye / anrejistre nouvo bot (ou dwe deja kreye li ak BotFather)",
-      "/bot <TOKEN> — Voye token pou anrejistre/modifie bot",
-      "/token_mw — Montre bot mwen yo",
-      "/description <CODE> <nouvo_descr> — Chanje deskripsyon",
-      "/info <CODE> <nouvo_about> — Chanje about / setabouttext",
-      "/setabouttext <CODE> <about> — menm bagay ak /info",
-      "/lis_bot — Lis tout bot",
-      "/bot_vivan — Bot ki aktif",
-      "/kòmand <CODE> <json_commands> — Mete kòmand (json)",
-      "/revokel <CODE> — Revoke / retire token",
-      "/non <CODE> <nouvo non> — Chanje non bot",
-      "/foto <CODE> <url_imaj> — Mete foto (metadata)",
-      "/sip_bot <CODE> — Siprime bot",
-      "/antre_nan_group_wi <CODE> <invite_link> — Fè bot antre nan group",
-      "/bot_prive <CODE> <on|off> — Fè bot prive/oswa piblik",
-      "/bot_mw — Wè bot ou yo",
-      "/notif_texte <mesaj> — Voye notif (via MAIN bot)",
-      "/lang <Kreyòl|Français|English|Español> — Chanje lang meni"
-    ],
+    // commands will be built dynamically from SUPPORTED_COMMANDS later
     ask_token_format: "Voye /bot <TOKEN> oswa /nouvo_bot <TOKEN> apre ou fin kreye bot la ak BotFather.",
     created_bot: "Bot anrejistre:",
     token_invalid: "Token pa valide oswa gen erè API.",
@@ -52,26 +59,6 @@ const TRANSLATIONS = {
   fr: {
     name: "Français",
     menu_title: "Bienvenue! Voici votre menu:",
-    commands: [
-      "/nouvo_bot <TOKEN> — Créer / enregistrer un nouveau bot (utilisez BotFather d'abord)",
-      "/bot <TOKEN> — Envoyer token pour enregistrer/modifier un bot",
-      "/token_mw — Voir mes bots",
-      "/description <CODE> <nouvelle_descr> — Changer la description",
-      "/info <CODE> <nouveau_about> — Changer about / setabouttext",
-      "/setabouttext <CODE> <about> — même chose que /info",
-      "/lis_bot — Lister tous les bots",
-      "/bot_vivan — Bots actifs",
-      "/kòmand <CODE> <json_commands> — Définir commandes (json)",
-      "/revokel <CODE> — Révoquer / retirer token",
-      "/non <CODE> <nouveau nom> — Changer le nom du bot",
-      "/foto <CODE> <url_image> — Enregistrer photo (métadonnée)",
-      "/sip_bot <CODE> — Supprimer bot",
-      "/antre_nan_group_wi <CODE> <invite_link> — Faire entrer le bot dans un groupe",
-      "/bot_prive <CODE> <on|off> — Rendre le bot privé/public",
-      "/bot_mw — Voir vos bots",
-      "/notif_texte <message> — Envoyer notification (via MAIN bot)",
-      "/lang <Kreyòl|Français|English|Español> — Changer la langue du menu"
-    ],
     ask_token_format: "Envoyez /bot <TOKEN> ou /nouvo_bot <TOKEN> après avoir créé le bot avec BotFather.",
     created_bot: "Bot enregistré:",
     token_invalid: "Token invalide ou erreur API.",
@@ -93,26 +80,6 @@ const TRANSLATIONS = {
   en: {
     name: "English",
     menu_title: "Welcome! Here is your menu:",
-    commands: [
-      "/nouvo_bot <TOKEN> — Create / register a new bot (use BotFather first)",
-      "/bot <TOKEN> — Send token to register/modify a bot",
-      "/token_mw — Show my bots",
-      "/description <CODE> <new_descr> — Change description",
-      "/info <CODE> <new_about> — Change about / setabouttext",
-      "/setabouttext <CODE> <about> — same as /info",
-      "/lis_bot — List all bots",
-      "/bot_vivan — Active bots",
-      "/kòmand <CODE> <json_commands> — Set commands (json)",
-      "/revokel <CODE> — Revoke / remove token",
-      "/non <CODE> <new name> — Change bot name",
-      "/foto <CODE> <url_image> — Save photo (metadata)",
-      "/sip_bot <CODE> — Delete bot",
-      "/antre_nan_group_wi <CODE> <invite_link> — Make bot join group",
-      "/bot_prive <CODE> <on|off> — Make bot private/public",
-      "/bot_mw — See your bots",
-      "/notif_texte <message> — Send notification (via MAIN bot)",
-      "/lang <Kreyòl|Français|English|Español> — Change menu language"
-    ],
     ask_token_format: "Send /bot <TOKEN> or /nouvo_bot <TOKEN> after creating bot with BotFather.",
     created_bot: "Bot registered:",
     token_invalid: "Token invalid or API error.",
@@ -134,26 +101,6 @@ const TRANSLATIONS = {
   es: {
     name: "Español",
     menu_title: "¡Bienvenido! Aquí está tu menú:",
-    commands: [
-      "/nouvo_bot <TOKEN> — Crear / registrar un nuevo bot (usa BotFather primero)",
-      "/bot <TOKEN> — Enviar token para registrar/modificar un bot",
-      "/token_mw — Mostrar mis bots",
-      "/description <CODE> <nueva_descr> — Cambiar la descripción",
-      "/info <CODE> <nuevo_about> — Cambiar about / setabouttext",
-      "/setabouttext <CODE> <about> — igual que /info",
-      "/lis_bot — Listar todos los bots",
-      "/bot_vivan — Bots activos",
-      "/kòmand <CODE> <json_commands> — Establecer comandos (json)",
-      "/revokel <CODE> — Revocar / eliminar token",
-      "/non <CODE> <nuevo nombre> — Cambiar nombre del bot",
-      "/foto <CODE> <url_imagen> — Guardar foto (metadatos)",
-      "/sip_bot <CODE> — Eliminar bot",
-      "/antre_nan_group_wi <CODE> <invite_link> — Hacer que el bot entre al grupo",
-      "/bot_prive <CODE> <on|off> — Hacer bot privado/público",
-      "/bot_mw — Ver tus bots",
-      "/notif_texte <mensaje> — Enviar notificación (vía MAIN bot)",
-      "/lang <Kreyòl|Français|English|Español> — Cambiar idioma del menú"
-    ],
     ask_token_format: "Envía /bot <TOKEN> o /nouvo_bot <TOKEN> después de crear el bot con BotFather.",
     created_bot: "Bot registrado:",
     token_invalid: "Token inválido o error de API.",
@@ -194,72 +141,255 @@ async function kvPut(key, value) {
   return false;
 }
 
-/* ---------- Telegram API for user tokens ---------- */
+/* ---------- Telegram HTTP helpers ---------- */
 async function callBotApiWithToken(token, method, body = {}) {
   const url = `https://api.telegram.org/bot${token}/${method}`;
   const opts = { method: "POST" };
-  if (body instanceof FormData) opts.body = body;
-  else { opts.headers = { "Content-Type": "application/json" }; opts.body = JSON.stringify(body); }
-  try { const res = await fetch(url, opts); return res.json().catch(()=>null); } catch(e){ return null; }
+  if (body instanceof FormData) {
+    opts.body = body;
+  } else {
+    opts.headers = { "Content-Type": "application/json" };
+    opts.body = JSON.stringify(body);
+  }
+  try {
+    const res = await fetch(url, opts);
+    const data = await res.json().catch(()=>null);
+    return { ok: res.ok, status: res.status, data };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 }
-async function getMe(token) { return callBotApiWithToken(token, "getMe", {}); }
+async function getMe(token) { 
+  const r = await callBotApiWithToken(token, "getMe", {});
+  if (!r.ok || !r.data || !r.data.ok) return null;
+  return r.data;
+}
 
-/* ---------- Helpers ---------- */
+/* ---------- small helpers ---------- */
 function isProbablyToken(text) { return /^\d+:[A-Za-z0-9_-]{35,}$/.test(text); }
-function mapLangInputToCode(input) {
-  if (!input) return null;
-  const s = input.trim().toLowerCase();
-  if (["kreyòl","kreyol","ky"].includes(s)) return "ky";
-  if (["français","francais","fr","french"].includes(s)) return "fr";
-  if (["english","en","ang"].includes(s)) return "en";
-  if (["español","espanol","es","spanish"].includes(s)) return "es";
-  return null;
-}
 function makeUniqueBotCode(user, botUser) {
-  const base = (botUser.username || botUser.id || "bot").toString().replace(/\W/g,'_').slice(0,12);
+  const base = (botUser.username || String(botUser.id || "bot")).toString().replace(/\W/g,'').slice(0,12);
   let code = base; let i = 1;
-  while (user.bots && user.bots[code]) code = base + "_" + i++;
+  while (user.bots && user.bots[code]) code = base + "" + i++;
   return code;
 }
+function genPendingId() { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`; }
 
-/* ---------- Messaging via MAIN bot ---------- */
-async function sendMessageToChat(chatId, text) {
+/* ---------- Messaging with inline keyboards ---------- */
+async function sendMessage(chatId, text, options = {}) {
+  const payload = { chat_id: chatId, text, parse_mode: "HTML" };
+  if (options.inline_keyboard) {
+    payload.reply_markup = { inline_keyboard: options.inline_keyboard };
+  }
   try {
-    await fetch(`${MAIN_TELEGRAM_API}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text })
-    });
-  } catch(e){}
+    await fetch(`${MAIN_TELEGRAM_API}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  } catch (e) {}
+}
+async function answerCallback(callbackQueryId, text = "") {
+  try {
+    await fetch(`${MAIN_TELEGRAM_API}/answerCallbackQuery`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ callback_query_id: callbackQueryId, text, show_alert: false }) });
+  } catch (e) {}
 }
 
-/* ---------- Core handlers ---------- */
+/* ---------- Pending-actions flow ---------- */
+/*
+ pending entry structure:
+ {
+   id: pendingId,
+   cmd: "description" | "setphoto" | ...,
+   args: { code?, rest?, extra? },
+   fromId: <telegram user id>,
+   chatId: <chat id>,
+   createdAt: Date.now()
+ }
+*/
+async function savePending(userId, pending) {
+  const key = `user:${userId}`;
+  const user = (await kvGet(key)) || { lang: "ky", bots: {} };
+  user.pendingActions = user.pendingActions || {};
+  user.pendingActions[pending.id] = pending;
+  await kvPut(key, user);
+}
+async function getPending(userId, pendingId) {
+  const user = await kvGet(`user:${userId}`);
+  if (!user || !user.pendingActions) return null;
+  return user.pendingActions[pendingId] || null;
+}
+async function removePending(userId, pendingId) {
+  const user = await kvGet(`user:${userId}`);
+  if (!user || !user.pendingActions) return;
+  delete user.pendingActions[pendingId];
+  await kvPut(`user:${userId}`, user);
+}
+
+/* ---------- Core handlers (registering bot etc) ---------- */
 async function registerNewBotFlow(userId, chatId, token, lang) {
-  await sendMessageToChat(chatId, TRANSLATIONS[lang].token_checking);
+  await sendMessage(chatId, TRANSLATIONS[lang].token_checking);
   const info = await getMe(token);
-  if (!info || !info.ok) { await sendMessageToChat(chatId, TRANSLATIONS[lang].token_invalid); return; }
+  if (!info || !info.ok) { await sendMessage(chatId, TRANSLATIONS[lang].token_invalid); return; }
   const botUser = info.result;
   let user = await kvGet("user:" + userId);
   if (!user) user = { lang: "ky", bots: {} };
   const code = makeUniqueBotCode(user, botUser);
   user.bots[code] = { token, info: botUser, active: true, createdAt: Date.now() };
   await kvPut("user:" + userId, user);
-  await sendMessageToChat(chatId, `${TRANSLATIONS[lang].created_bot} ${code} — @${botUser.username || "?"}`);
+  await sendMessage(chatId, `${TRANSLATIONS[lang].created_bot} ${code} — @${botUser.username || "?"}`);
 }
 
-async function setAboutTextForBot(userId, chatId, code, aboutText, lang) {
-  if (!code || !aboutText) { await sendMessageToChat(chatId, TRANSLATIONS[lang].usage_info); return; }
-  const user = await kvGet("user:" + userId);
-  if (!user || !user.bots || !user.bots[code]) { await sendMessageToChat(chatId, TRANSLATIONS[lang].bot_not_found); return; }
+/* ---------- Execute pending actions (after confirm) ---------- */
+async function executePending(userId, pending) {
+  const chatId = pending.chatId;
+  const user = await kvGet(`user:${userId}`);
+  if (!user) {
+    await sendMessage(chatId, "User storage missing.");
+    return;
+  }
+  const code = pending.args.code;
+  if (!code || !user.bots || !user.bots[code]) {
+    await sendMessage(chatId, TRANSLATIONS[user.lang].bot_not_found);
+    return;
+  }
   const b = user.bots[code];
-  const res = await callBotApiWithToken(b.token, "setMyDescription", { description: aboutText });
-  b.info = b.info || {}; b.info.description = aboutText;
-  await kvPut("user:" + userId, user);
-  await sendMessageToChat(chatId, `${TRANSLATIONS[lang].result_prefix} ${JSON.stringify(res)}`);
+  const cmd = pending.cmd;
+
+  // helper to send back result JSON to chat
+  const sendResult = async (res) => {
+    await sendMessage(chatId, `${TRANSLATIONS[user.lang].result_prefix} ${JSON.stringify(res)}`);
+  };
+
+  try {
+    if (cmd === "description" || cmd === "info" || cmd === "setabouttext") {
+      const rest = pending.args.rest || "";
+      const res = await callBotApiWithToken(b.token, "setMyDescription", { description: rest });
+      b.info = b.info || {}; b.info.description = rest;
+      await kvPut(`user:${userId}`, user);
+      await sendResult(res);
+      return;
+    }
+
+    if (cmd === "non" || cmd === "setname") {
+      const rest = pending.args.rest || "";
+      const res = await callBotApiWithToken(b.token, "setMyName", { name: rest });
+      b.info = b.info || {}; b.info.first_name = rest;
+      await kvPut(`user:${userId}`, user);
+      await sendResult(res);
+      return;
+    }
+
+    if (cmd === "kòmand" || cmd === "setcommands") {
+      const parsed = pending.args.parsedCommands;
+      if (!parsed) { await sendMessage(chatId, TRANSLATIONS[user.lang].error + " JSON invalide."); return; }
+      const res = await callBotApiWithToken(b.token, "setMyCommands", { commands: parsed });
+      await sendResult(res);
+      return;
+    }
+
+    if (cmd === "antre_nan_group_wi" || cmd === "joinInvite") {
+      const link = pending.args.link;
+      const res = await callBotApiWithToken(b.token, "joinChatByInviteLink", { invite_link: link });
+      await sendResult(res);
+      return;
+    }
+
+    if (cmd === "bot_prive") {
+      const flag = pending.args.flag;
+      b.private = (flag === "on");
+      await kvPut(`user:${userId}`, user);
+      await sendMessage(chatId, TRANSLATIONS[user.lang].ok + " — private: " + b.private);
+      return;
+    }
+
+    if (cmd === "revokel" || cmd === "revoke") {
+      delete user.bots[code];
+      await kvPut(`user:${userId}`, user);
+      await sendMessage(chatId, TRANSLATIONS[user.lang].ok + " — token removed");
+      return;
+    }
+
+    if (cmd === "sip_bot" || cmd === "delete") {
+      delete user.bots[code];
+      await kvPut(`user:${userId}`, user);
+      await sendMessage(chatId, TRANSLATIONS[user.lang].ok + " — bot deleted");
+      return;
+    }
+
+    if (cmd === "foto" || cmd === "setphoto") {
+      // pending.args.file_id should exist; we download via MAIN bot, upload to tf-stream-url and save metadata
+      const fileId = pending.args.file_id;
+      if (!fileId) { await sendMessage(chatId, TRANSLATIONS[user.lang].error + " no file_id"); return; }
+      // getFile using MAIN bot
+      const gf = await callBotApiWithToken(MAIN_TELEGRAM_TOKEN, "getFile", { file_id: fileId });
+      if (!gf.ok || !gf.data || !gf.data.ok || !gf.data.result || !gf.data.result.file_path) {
+        await sendMessage(chatId, TRANSLATIONS[user.lang].error + " getFile failed");
+        return;
+      }
+      const filePath = gf.data.result.file_path;
+      const fileUrl = `https://api.telegram.org/file/bot${MAIN_TELEGRAM_TOKEN}/${filePath}`;
+      // download file
+      const got = await fetch(fileUrl);
+      if (!got.ok) { await sendMessage(chatId, TRANSLATIONS[user.lang].error + " could not download file"); return; }
+      const ab = await got.arrayBuffer();
+      // upload to tf-stream-url.onrender.com
+      try {
+        const form = new FormData();
+        // create a blob with a fallback filename
+        const blob = new Blob([ab], { type: "application/octet-stream" });
+        form.append("file", blob, "upload.jpg");
+        const up = await fetch("https://tf-stream-url.onrender.com/upload", {
+          method: "POST",
+          body: form
+        });
+        if (!up.ok) { await sendMessage(chatId, TRANSLATIONS[user.lang].error + " upload failed"); return; }
+        const upJson = await up.json().catch(()=>null);
+        const uploadedUrl = (upJson && upJson.url) ? upJson.url : null;
+        if (!uploadedUrl) {
+          await sendMessage(chatId, TRANSLATIONS[user.lang].error + " upload did not return URL");
+          return;
+        }
+        // save metadata
+        b.photo = uploadedUrl;
+        await kvPut(`user:${userId}`, user);
+        await sendMessage(chatId, TRANSLATIONS[user.lang].ok + " — photo saved: " + uploadedUrl);
+        return;
+      } catch (e) {
+        await sendMessage(chatId, TRANSLATIONS[user.lang].error + " upload exception: " + (e.message || e));
+        return;
+      }
+    }
+
+    // default unknown
+    await sendMessage(chatId, "Command execution not implemented: " + cmd);
+  } catch (e) {
+    await sendMessage(chatId, TRANSLATIONS[user.lang].error + " " + (e.message || String(e)));
+  } finally {
+    // remove pending
+    await removePending(userId, pending.id);
+  }
 }
 
-/* ---------- Main message processing ---------- */
+/* ---------- Helper to present bot selection keyboard ---------- */
+function buildBotSelectionKeyboard(bots, pendingId) {
+  // bots: object { code: { info:..., ... } }
+  const rows = [];
+  for (const code of Object.keys(bots)) {
+    const label = `${code} — ${bots[code].info?.username ? "@" + bots[code].info.username : (bots[code].info?.first_name || "")}`;
+    rows.push([{ text: label, callback_data: `pick:${pendingId}:${code}` }]);
+  }
+  rows.push([{ text: "Cancel", callback_data: `cancel:${pendingId}` }]);
+  return rows;
+}
+function buildConfirmKeyboard(pendingId, code) {
+  return [[
+    { text: "Confirm", callback_data: `confirm:${pendingId}:${code}` },
+    { text: "Cancel", callback_data: `cancel:${pendingId}` }
+  ]];
+}
+
+/* ---------- Main message processing (handles messages & photos) ---------- */
 async function handleTelegramMessage(update) {
+  if (update.callback_query) {
+    return await handleCallbackQuery(update.callback_query);
+  }
   if (!update.message) return;
   const msg = update.message;
   const chatId = msg.chat.id;
@@ -271,6 +401,35 @@ async function handleTelegramMessage(update) {
 
   const lang = user.lang || "ky";
 
+  // If photo received --> start photo pending flow (user asked to set photo)
+  if (msg.photo && msg.photo.length) {
+    // get best quality (last)
+    const photoObj = msg.photo[msg.photo.length - 1];
+    const fileId = photoObj.file_id;
+    // create pending action 'setphoto'
+    const pendingId = genPendingId();
+    const pending = {
+      id: pendingId,
+      cmd: "foto",
+      args: { file_id: fileId },
+      fromId: userId,
+      chatId,
+      createdAt: Date.now()
+    };
+    await savePending(userId, pending);
+    // if user has no bots -> inform
+    if (!user.bots || Object.keys(user.bots).length === 0) {
+      await sendMessage(chatId, TRANSLATIONS[lang].bot_list_empty);
+      await removePending(userId, pendingId);
+      return;
+    }
+    // show bot selection keyboard
+    const kb = buildBotSelectionKeyboard(user.bots, pendingId);
+    await sendMessage(chatId, "Choose which bot should use this photo (then Confirm):", { inline_keyboard: kb });
+    return;
+  }
+
+  // token text direct (user pasted token)
   if (isProbablyToken(text)) {
     return await registerNewBotFlow(userId, chatId, text, lang);
   }
@@ -280,141 +439,166 @@ async function handleTelegramMessage(update) {
 
   if (cmd === "/start") {
     const tr = TRANSLATIONS[user.lang] || TRANSLATIONS.ky;
-    const body = [tr.menu_title, "", ...tr.commands].join("\n");
-    await sendMessageToChat(chatId, body);
+    // build visible commands list from SUPPORTED_COMMANDS
+    const cmdList = [];
+    for (const c of ["/nouvo_bot","/bot","/token_mw","/lis_bot","/bot_vivan","/description","/info","/setabouttext","/kòmand","/revokel","/non","/foto","/sip_bot","/antre_nan_group_wi","/bot_prive","/notif_texte","/lang"]) {
+      if (SUPPORTED_COMMANDS[c]) cmdList.push(c);
+    }
+    const body = [tr.menu_title, "", ...cmdList].join("\n");
+    await sendMessage(chatId, body);
     return;
   }
 
   if (cmd === "/lang") {
     const raw = parts.slice(1).join(" ");
     const mapped = mapLangInputToCode(raw);
-    if (!mapped) { await sendMessageToChat(chatId, TRANSLATIONS[lang].usage_lang); return; }
+    if (!mapped) { await sendMessage(chatId, TRANSLATIONS[lang].usage_lang); return; }
     user.lang = mapped; await kvPut("user:" + userId, user);
-    await sendMessageToChat(chatId, `${TRANSLATIONS[mapped].lang_changed} ${TRANSLATIONS[mapped].name}`);
+    await sendMessage(chatId, `${TRANSLATIONS[mapped].lang_changed} ${TRANSLATIONS[mapped].name}`);
     return;
   }
 
-  if (cmd === "/bot") {
-    const token = parts[1] || "";
-    if (!token) { await sendMessageToChat(chatId, TRANSLATIONS[lang].usage_bot); return; }
-    return await registerNewBotFlow(userId, chatId, token, lang);
+  // Commands that require selection & confirmation:
+  const tokenRequiredCmds = {
+    "/description": "description",
+    "/info": "info",
+    "/setabouttext": "setabouttext",
+    "/non": "non",
+    "/kòmand": "kòmand",
+    "/antre_nan_group_wi": "antre_nan_group_wi",
+    "/bot_prive": "bot_prive",
+    "/revokel": "revokel",
+    "/sip_bot": "sip_bot",
+    "/foto": "foto"
+  };
+
+  if (tokenRequiredCmds[cmd]) {
+    const short = tokenRequiredCmds[cmd];
+    // parse arguments if user included a code; if code provided we still ask confirmation
+    let codeArg = parts[1] || "";
+    let rest = parts.slice(2).join(" ");
+    // For /kòmand we expect JSON after code
+    let parsedCommands = null;
+    if (short === "kòmand") {
+      try { parsedCommands = JSON.parse(rest); } catch(e){ /* we'll inform later if invalid */ }
+    }
+    // Build pending and show bot selection (or confirm if single bot)
+    const pendingId = genPendingId();
+    const pending = { id: pendingId, cmd: short, args: { code: codeArg || null, rest: rest || null, parsedCommands }, fromId: userId, chatId, createdAt: Date.now() };
+    await savePending(userId, pending);
+
+    // If user has no bots -> inform
+    if (!user.bots || Object.keys(user.bots).length === 0) {
+      await sendMessage(chatId, TRANSLATIONS[lang].bot_list_empty);
+      await removePending(userId, pendingId);
+      return;
+    }
+
+    // If user provided code and it exists -> ask confirm directly
+    if (codeArg && user.bots[codeArg]) {
+      // ask confirm
+      const kb = buildConfirmKeyboard(pendingId, codeArg);
+      await sendMessage(chatId, "Please confirm the action for bot: " + codeArg, { inline_keyboard: kb });
+      return;
+    }
+
+    // else present bot selection keyboard
+    const kb = buildBotSelectionKeyboard(user.bots, pendingId);
+    await sendMessage(chatId, "Choose which bot to run the command (then Confirm):", { inline_keyboard: kb });
+    return;
   }
 
-  if (cmd === "/nouvo_bot" || cmd === "/newbot") {
+  // non-token commands handled immediately:
+  if (cmd === "/bot" || cmd === "/nouvo_bot" || cmd === "/newbot") {
     const token = parts[1] || "";
-    if (!token) { await sendMessageToChat(chatId, TRANSLATIONS[lang].usage_nouvo + "\n" + TRANSLATIONS[lang].must_use_botfather); return; }
+    if (!token) { await sendMessage(chatId, TRANSLATIONS[lang].usage_nouvo + "\n" + TRANSLATIONS[lang].must_use_botfather); return; }
     return await registerNewBotFlow(userId, chatId, token, lang);
   }
 
   if (cmd === "/token_mw") {
-    const list = Object.entries(user.bots || {}).map(([code, b]) => `${code} — ${b.info ? b.info.username : "unknown"}`);
-    await sendMessageToChat(chatId, (list.length ? list.join("\n") : TRANSLATIONS[lang].bot_list_empty));
+    const list = Object.entries(user.bots || {}).map(([code, b]) => `${code} — ${b.info ? (b.info.username || "unknown") : "unknown"}`);
+    await sendMessage(chatId, (list.length ? list.join("\n") : TRANSLATIONS[lang].bot_list_empty));
     return;
   }
 
   if (cmd === "/lis_bot" || cmd === "/bot_mw") {
-    const list = Object.entries(user.bots || {}).map(([code, b]) => `${code} — ${b.info ? `${b.info.first_name || ""} @${b.info.username || ""}` : "unknown"} — active:${!!b.active}`);
-    await sendMessageToChat(chatId, (list.length ? list.join("\n") : TRANSLATIONS[lang].bot_list_empty));
+    const list = Object.entries(user.bots || {}).map(([code, b]) => {
+      if (b.info) {
+        const namePart = `${b.info.first_name || ""}`.trim();
+        const uname = b.info.username ? `@${b.info.username}` : "";
+        return `${code} — ${namePart} ${uname} — active:${!!b.active}`;
+      }
+      return `${code} — unknown — active:${!!b.active}`;
+    });
+    await sendMessage(chatId, (list.length ? list.join("\n") : TRANSLATIONS[lang].bot_list_empty));
     return;
   }
 
   if (cmd === "/bot_vivan") {
     const list = Object.entries(user.bots || {}).filter(([_,b])=>b.active).map(([c,b])=>`${c} — @${b.info?.username||"?"}`);
-    await sendMessageToChat(chatId, (list.length ? list.join("\n") : TRANSLATIONS[lang].bot_list_empty));
-    return;
-  }
-
-  if (cmd === "/info" || cmd === "/setabouttext") {
-    const code = parts[1];
-    const rest = parts.slice(2).join(" ");
-    return await setAboutTextForBot(userId, chatId, code, rest, lang);
-  }
-
-  if (cmd === "/description") {
-    const code = parts[1]; const rest = parts.slice(2).join(" ");
-    if (!code || !rest) { await sendMessageToChat(chatId, TRANSLATIONS[lang].usage_info); return; }
-    const b = user.bots[code];
-    if (!b) { await sendMessageToChat(chatId, TRANSLATIONS[lang].bot_not_found); return; }
-    const res = await callBotApiWithToken(b.token, "setMyDescription", { description: rest });
-    b.info = b.info || {}; b.info.description = rest;
-    await kvPut("user:" + userId, user);
-    await sendMessageToChat(chatId, `${TRANSLATIONS[lang].result_prefix} ${JSON.stringify(res)}`);
-    return;
-  }
-
-  if (cmd === "/revokel") {
-    const code = parts[1]; if (!code) { await sendMessageToChat(chatId, TRANSLATIONS[lang].error + " /revokel <CODE>"); return; }
-    if (!user.bots[code]) { await sendMessageToChat(chatId, TRANSLATIONS[lang].bot_not_found); return; }
-    delete user.bots[code]; await kvPut("user:" + userId, user);
-    await sendMessageToChat(chatId, TRANSLATIONS[lang].ok + " — " + TRANSLATIONS[lang].result_prefix + " token removed");
-    return;
-  }
-
-  if (cmd === "/non") {
-    const code = parts[1]; const rest = parts.slice(2).join(" ");
-    if (!code || !rest) { await sendMessageToChat(chatId, TRANSLATIONS[lang].error + " /non <CODE> <nouvo non>"); return; }
-    const b = user.bots[code]; if (!b) { await sendMessageToChat(chatId, TRANSLATIONS[lang].bot_not_found); return; }
-    const res = await callBotApiWithToken(b.token, "setMyName", { name: rest });
-    b.info = b.info || {}; b.info.first_name = rest;
-    await kvPut("user:" + userId, user);
-    await sendMessageToChat(chatId, `${TRANSLATIONS[lang].result_prefix} ${JSON.stringify(res)}`);
-    return;
-  }
-
-  if (cmd === "/foto") {
-    const code = parts[1]; const urlImg = parts.slice(2).join(" ");
-    if (!code || !urlImg) { await sendMessageToChat(chatId, TRANSLATIONS[lang].error + " /foto <CODE> <url_imaj>"); return; }
-    const b = user.bots[code]; if (!b) { await sendMessageToChat(chatId, TRANSLATIONS[lang].bot_not_found); return; }
-    b.photo = urlImg; await kvPut("user:" + userId, user);
-    await sendMessageToChat(chatId, TRANSLATIONS[lang].ok + " — " + TRANSLATIONS[lang].result_prefix + " photo saved as metadata");
-    return;
-  }
-
-  if (cmd === "/sip_bot") {
-    const code = parts[1]; if (!code) { await sendMessageToChat(chatId, TRANSLATIONS[lang].error + " /sip_bot <CODE>"); return; }
-    if (!user.bots[code]) { await sendMessageToChat(chatId, TRANSLATIONS[lang].bot_not_found); return; }
-    delete user.bots[code]; await kvPut("user:" + userId, user);
-    await sendMessageToChat(chatId, TRANSLATIONS[lang].ok + " — bot deleted");
-    return;
-  }
-
-  if (cmd === "/bot_prive") {
-    const code = parts[1]; const flag = (parts[2] || "").toLowerCase();
-    if (!code || !["on","off"].includes(flag)) { await sendMessageToChat(chatId, TRANSLATIONS[lang].error + " /bot_prive <CODE> <on|off>"); return; }
-    const b = user.bots[code]; if (!b) { await sendMessageToChat(chatId, TRANSLATIONS[lang].bot_not_found); return; }
-    b.private = (flag === "on"); await kvPut("user:" + userId, user);
-    await sendMessageToChat(chatId, TRANSLATIONS[lang].ok + " — private: " + b.private);
-    return;
-  }
-
-  if (cmd === "/kòmand") {
-    const code = parts[1]; const jsonText = parts.slice(2).join(" ");
-    if (!code || !jsonText) { await sendMessageToChat(chatId, TRANSLATIONS[lang].error + " /kòmand <CODE> <json_commands>"); return; }
-    const b = user.bots[code]; if (!b) { await sendMessageToChat(chatId, TRANSLATIONS[lang].bot_not_found); return; }
-    let parsed;
-    try { parsed = JSON.parse(jsonText); } catch(e) { await sendMessageToChat(chatId, TRANSLATIONS[lang].error + " JSON invalide."); return; }
-    const res = await callBotApiWithToken(b.token, "setMyCommands", { commands: parsed });
-    await sendMessageToChat(chatId, `${TRANSLATIONS[lang].result_prefix} ${JSON.stringify(res)}`);
-    return;
-  }
-
-  if (cmd === "/antre_nan_group_wi") {
-    const code = parts[1]; const link = parts.slice(2).join(" ");
-    if (!code || !link) { await sendMessageToChat(chatId, TRANSLATIONS[lang].error + " /antre_nan_group_wi <CODE> <invite_link>"); return; }
-    const b = user.bots[code]; if (!b) { await sendMessageToChat(chatId, TRANSLATIONS[lang].bot_not_found); return; }
-    const res = await callBotApiWithToken(b.token, "joinChatByInviteLink", { invite_link: link });
-    await sendMessageToChat(chatId, `${TRANSLATIONS[lang].result_prefix} ${JSON.stringify(res)}`);
+    await sendMessage(chatId, (list.length ? list.join("\n") : TRANSLATIONS[lang].bot_list_empty));
     return;
   }
 
   if (cmd === "/notif_texte") {
     const m = parts.slice(1).join(" ");
-    if (!m) { await sendMessageToChat(chatId, TRANSLATIONS[lang].error + " /notif_texte <mesaj>"); return; }
-    await sendMessageToChat(chatId, TRANSLATIONS[lang].ok + " — " + TRANSLATIONS[lang].result_prefix + " notif sent (local demo)");
+    if (!m) { await sendMessage(chatId, TRANSLATIONS[lang].error + " /notif_texte <mesaj>"); return; }
+    await sendMessage(chatId, TRANSLATIONS[lang].ok + " — " + TRANSLATIONS[lang].result_prefix + " notif sent (local demo)");
     return;
   }
 
-  await sendMessageToChat(chatId, TRANSLATIONS[lang].unknown_cmd);
+  // fallback unknown:
+  await sendMessage(chatId, TRANSLATIONS[lang].unknown_cmd);
+}
+
+/* ---------- Callback query handling (bot pick / confirm / cancel) ---------- */
+async function handleCallbackQuery(cb) {
+  const data = cb.data || "";
+  const fromId = String(cb.from.id);
+  const callbackId = cb.id;
+  const chatId = cb.message?.chat?.id;
+  // patterns: pick:<pendingId>:<code>  | confirm:<pendingId>:<code> | cancel:<pendingId>
+  const parts = data.split(":");
+  const action = parts[0];
+  if (action === "cancel") {
+    const pendingId = parts[1];
+    await removePending(fromId, pendingId);
+    await answerCallback(callbackId, "Cancelled");
+    if (chatId) await sendMessage(chatId, "Action cancelled.");
+    return;
+  }
+  if (action === "pick") {
+    const pendingId = parts[1];
+    const code = parts[2];
+    const pending = await getPending(fromId, pendingId);
+    if (!pending) {
+      await answerCallback(callbackId, "Pending action expired or not found.");
+      return;
+    }
+    // show confirm keyboard
+    const kb = buildConfirmKeyboard(pendingId, code);
+    await answerCallback(callbackId, `Selected ${code}`);
+    if (chatId) await sendMessage(chatId, `Selected ${code}. Please confirm:`, { inline_keyboard: kb });
+    return;
+  }
+  if (action === "confirm") {
+    const pendingId = parts[1];
+    const code = parts[2];
+    const pending = await getPending(fromId, pendingId);
+    if (!pending) {
+      await answerCallback(callbackId, "Pending action expired or not found.");
+      return;
+    }
+    // attach selected code and execute
+    pending.args = pending.args || {};
+    pending.args.code = code;
+    await answerCallback(callbackId, "Confirmed");
+    if (chatId) await sendMessage(chatId, "Confirmed — executing...");
+    await executePending(fromId, pending);
+    return;
+  }
+
+  await answerCallback(callbackId, "Unknown callback");
 }
 
 /* ---------- Fetch handler ---------- */
@@ -426,8 +610,19 @@ async function handleRequest(request) {
       await handleTelegramMessage(update);
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     } catch (err) {
-      return new Response(JSON.stringify({ ok: false, error: err.message }), { status: 500 });
+      return new Response(JSON.stringify({ ok: false, error: err && err.message ? err.message : String(err) }), { status: 500 });
     }
   }
   return new Response("Method not allowed", { status: 405 });
 }
+
+/* ---------- small util mapLangInputToCode included ---------- */
+function mapLangInputToCode(input) {
+  if (!input) return null;
+  const s = input.trim().toLowerCase();
+  if (["kreyòl","kreyol","ky"].includes(s)) return "ky";
+  if (["français","francais","fr","french"].includes(s)) return "fr";
+  if (["english","en","ang"].includes(s)) return "en";
+  if (["español","espanol","es","spanish"].includes(s)) return "es";
+  return null;
+      }
