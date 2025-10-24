@@ -1,0 +1,6 @@
+name = "tg-ping-bot"
+main = "index.js"
+compatibility_date = "2025-10-24"
+type = "javascript"
+# Si w itilize account id oswa workers.dev subdomain, ajoute account_id = "XXX"
+# Si w vle route otomatik sou domaine custom, ajoute route = "https://mon-domain.com/webhook"
