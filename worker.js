@@ -63,6 +63,18 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     while (user.bots && user.bots[code]) code = base + "" + i++;
     return code;
   }
+  function escapeHtml(unsafe) {
+    if (!unsafe) return "";
+    return unsafe.replace(/[&<>"']/g, function(m) { return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' })[m]; });
+  }
+  function findFirstUsername(text) {
+    const m = text.match(/@([a-z0-9_]{5,})/i);
+    return m ? m[1] : null;
+  }
+  function findFirstUrl(text) {
+    const m = text.match(/https?:\/\/\S+/i);
+    return m ? m[0] : null;
+  }
 
   /* ================== TELEGRAM API HELPERS ================== */
   async function callBotApiWithToken(token, method, body = {}) {
@@ -99,7 +111,6 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     ky: {
       name: "Kreyòl",
       menu_title: "Men meni prensipal la:",
-      // start menu card (7 commands)
       start_buttons: [
         [ { text: "/lang", callback_data: "cmd:/lang" }, { text: "/aktive", callback_data: "cmd:/aktive" } ],
         [ { text: "/èd", callback_data: "cmd:/èd" }, { text: "/bot", callback_data: "cmd:/bot" } ],
@@ -122,19 +133,17 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       ai_activated: "Bot lan aktive avèk konfig AI.",
       cannot_set_webhook: "Webhook pa mete otomatikman (WEBHOOK_BASE_URL pa defini).",
       choose_bot_after_ai: "Chwazi ki bot pou asiyen AI sa a",
-      // /èd messages detail (long)
       help_title: "EDE - Eksplikasyon kòmand yo",
       help_intro: "Men eksplikasyon detaye sou chak kòmand (nan lang ou chwazi a).",
       help_commands: {
         "/lang": "Chanje lang: Eg: /lang Kreyòl oswa /lang English. Tout tèks entèfas ap chanje apre sa.",
-        "/aktive": "Kòmand pou aktive yon bot; li pèmèt ou asiyen yon AI (Adam_D'H7) oswa mete li kòm bot sèlman oswa AI+Bot. Apre chwa ou pral chwazi bot pou aplike konfig la.",
-        "/èd": "Montre eksplikasyon detaye sou chak kòmand. (W ap wè sa kouwap li kounye a.)",
+        "/aktive": "Kòmand pou aktive yon bot; asiyen yon AI (Adam_D'H7) oswa mete li kòm bot sèlman oswa AI+Bot. Apre chwa ou pral chwazi bot pou aplike konfig la.",
+        "/èd": "Montre eksplikasyon detaye sou chak kòmand.",
         "/bot": "Enskri/kreye yon bot: Voye token (fè ak BotFather) ak /bot <TOKEN>. Kòd la verifye token epi sove bot lan.",
         "/sip_bot": "Revoke / efase bot ou te anrejistre lokalman - efase token lokalman (pa revoke sou BotFather).",
         "/lis_bot": "Montre lis bot ou yo - username ak code.",
         "/mesaj": "Voye yon mesaj kòm bot chwazi a pou tout abonnés (tout chat ki te rankontre worker la). Ou pral chwazi si se simple tèks oswa yon card (title|body)."
       },
-      // broadcast flow prompts
       broadcast_choose_type: "Kouman ou vle voye mesaj la? Simple Text oswa Card?",
       broadcast_options: ["Simple Text","Card"],
       broadcast_send_prompt_text: "Voye tèks la kounye a (sa wap voye bay tout abonnés).",
@@ -170,13 +179,13 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       help_title: "AIDE - Explications des commandes",
       help_intro: "Voici des explications détaillées pour chaque commande (dans votre langue).",
       help_commands: {
-        "/lang": "Change la langue : ex /lang Français ou /lang English. Tous les textes s'affichent ensuite dans cette langue.",
+        "/lang": "Change la langue : ex /lang Français ou /lang English.",
         "/aktive": "Permet d'activer un bot : assigner une IA (Adam_D'H7) ou activer mode bot ou AI+Bot.",
-        "/èd": "Affiche l'aide détaillée (c'est ce que vous lisez).",
+        "/èd": "Affiche l'aide détaillée.",
         "/bot": "Enregistre/crée un bot : Envoyez le token via /bot <TOKEN>.",
         "/sip_bot": "Révoque / supprime votre bot localement (ne révoque pas le token sur BotFather).",
-        "/lis_bot": "Affiche la liste de vos bots (username et code).",
-        "/mesaj": "Envoie un message en tant que bot sélectionné à tous les abonnés. Vous choisirez Simple Text ou Card."
+        "/lis_bot": "Affiche la liste de vos bots.",
+        "/mesaj": "Envoie un message en tant que bot sélectionné à tous les abonnés."
       },
       broadcast_choose_type: "Comment voulez-vous envoyer le message ? Simple Text ou Card ?",
       broadcast_options: ["Simple Text","Card"],
@@ -213,13 +222,13 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       help_title: "HELP - Commands explanation",
       help_intro: "Below are detailed explanations for each command (in your language).",
       help_commands: {
-        "/lang": "Change language: e.g. /lang English or /lang Kreyòl. UI text will switch accordingly.",
+        "/lang": "Change language: e.g. /lang English or /lang Kreyòl.",
         "/aktive": "Activate a bot: assign an AI (Adam_D'H7) or set mode Bot or AI+Bot.",
-        "/èd": "Show detailed help text (you are reading it now).",
+        "/èd": "Show detailed help text.",
         "/bot": "Register/create a bot: send its token via /bot <TOKEN>.",
-        "/sip_bot": "Revoke / delete the bot locally (does not revoke token on BotFather).",
+        "/sip_bot": "Revoke / delete your bot locally (does not revoke token on BotFather).",
         "/lis_bot": "List your bots (username and code).",
-        "/mesaj": "Send a message as the selected bot to all subscribers. You'll choose Simple Text or Card."
+        "/mesaj": "Send a message as the selected bot to all subscribers."
       },
       broadcast_choose_type: "How do you want to send the message? Simple Text or Card?",
       broadcast_options: ["Simple Text","Card"],
@@ -258,10 +267,10 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       help_commands: {
         "/lang": "Cambia el idioma: ej /lang Español o /lang English.",
         "/aktive": "Activa un bot: asignar una IA (Adam_D'H7) o poner modo Bot o AI+Bot.",
-        "/èd": "Muestra la ayuda detallada (lo que estás leyendo).",
+        "/èd": "Muestra la ayuda detallada.",
         "/bot": "Registra/crea un bot: envía su token con /bot <TOKEN>.",
         "/sip_bot": "Revoca / borra tu bot localmente (no revoca el token en BotFather).",
-        "/lis_bot": "Muestra la lista de tus bots (username y code).",
+        "/lis_bot": "Muestra la lista de tus bots.",
         "/mesaj": "Envía un mensaje como el bot seleccionado a todos los suscriptores."
       },
       broadcast_choose_type: "¿Cómo quieres enviar el mensaje? Simple Text o Card?",
@@ -287,12 +296,10 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
   async function getPending(userId, pendingId) { return await kvGet(`pending:${pendingId}`); }
   async function removePending(userId, pendingId) { await kvDelete(`pending:${pendingId}`); }
   async function findPendingByState(userId, state) {
-    // memory-only scan fallback
     for (const id of Object.keys(MEMORY_DB.pending)) {
       const p = MEMORY_DB.pending[id];
       if (p && p.fromId === userId && p.state === state) return p;
     }
-    // KV cannot list easily here; return null
     return null;
   }
 
@@ -347,6 +354,31 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     return rows;
   }
 
+  function buildActivationChoiceKeyboard(pendingId, lang) {
+    const opts = TRANSLATIONS[lang].activation_options || ["AI","Bot","AI & Bot"];
+    const rows = opts.map(o => [{ text: o, callback_data: `activate_choice:${shortCallbackKey(pendingId,o)}` }]);
+    rows.push([{ text: "Cancel", callback_data: `cancel:${shortCallbackKey(pendingId,'cancel')}` }]);
+    return rows;
+  }
+
+  function buildCardKeyboardFromBody(body, pendingId) {
+    // Attempt to find a username and a url in the body
+    const rows = [];
+    const username = findFirstUsername(body);
+    const url = findFirstUrl(body);
+    if (username) {
+      // touch -> link to t.me/username
+      rows.push([ { text: "Touch", url: `https://t.me/${username}` } ]);
+    }
+    if (url) {
+      rows.push([ { text: "Lyen", url: url } ]);
+    }
+    // Yow button -> callback (will be handled)
+    const ykey = shortCallbackKey(pendingId, "yow");
+    rows.push([ { text: "Yow", callback_data: `yow:${ykey}` } ]);
+    return rows;
+  }
+
   /* ================== FORMAT RESULT ================== */
   function formatResult(cmd, res, b, extra = {}) {
     const name = b && b.info && b.info.username ? "@" + b.info.username : (b && b.code ? b.code : "bot");
@@ -376,7 +408,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     const cmd = pending.cmd;
 
     try {
-      // sendMessage (single chat)
+      // send single notification
       if (cmd === "notif_texte") {
         const textToSend = pending.args.text || "";
         if (!textToSend) { await sendMessageViaMain(chatId, TRANSLATIONS[user.lang].error + " no text to send"); await removePending(userId, pending.id); return; }
@@ -386,38 +418,52 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
         return;
       }
 
-      // broadcast (to all subscribers)
+      // broadcast to all subscribers
       if (cmd === "broadcast") {
         const mode = pending.args.broadcastMode; // "Simple Text" or "Card"
         const payloadText = pending.args.text || "";
         const subs = await getSubscribers();
-        // send one-by-one (consider rate limits)
+        // send one-by-one (be mindful of rate limits)
         for (const s of subs) {
           try {
             if (mode === "Card") {
-              // expect pending.args.cardTitle and cardBody OR text with Title|Body
               const title = pending.args.cardTitle || "";
               const body = pending.args.cardBody || payloadText || "";
               const html = `<b>${escapeHtml(title)}</b>\n\n${escapeHtml(body)}`;
-              await callBotApiWithToken(b.token, "sendMessage", { chat_id: s, text: html, parse_mode: "HTML" });
+              const kb = buildCardKeyboardFromBody(body, pending.id);
+              await callBotApiWithToken(b.token, "sendMessage", { chat_id: s, text: html, parse_mode: "HTML", reply_markup: { inline_keyboard: kb } });
             } else {
               await callBotApiWithToken(b.token, "sendMessage", { chat_id: s, text: payloadText });
             }
-          } catch (e) { /* continue */ }
+          } catch (e) { /* ignore send errors per subscriber */ }
         }
         await sendMessageViaMain(chatId, TRANSLATIONS[user.lang].broadcast_done);
         await removePending(userId, pending.id);
         return;
       }
 
-      // description/name/commands/photo/activate flows preserved if needed...
-      // (we only implemented broadcast & notif_texte here per requirement)
+      // other flows not reimplemented here
       await sendMessageViaMain(chatId, "Operation not implemented: " + cmd);
       await removePending(userId, pending.id);
     } catch (e) {
       await sendMessageViaMain(chatId, TRANSLATIONS[user.lang].error + " " + (e.message || String(e)));
       await removePending(userId, pending.id);
     }
+  }
+
+  /* ================== LIST HELPERS ================== */
+  async function sendBotList(chatId, user) {
+    const lang = user.lang || "ky";
+    const entries = Object.entries(user.bots || {});
+    if (!entries.length) { await sendMessageViaMain(chatId, TRANSLATIONS[lang].bot_list_empty); return; }
+    const lines = entries.map(([code, b]) => { const uname = b.info?.username ? "@" + b.info.username : "(no username)"; return `${uname} — ${code}`; });
+    // quick actions: show buttons for each bot (link if username)
+    const kb = entries.map(([code, b]) => {
+      if (b.info?.username) return [{ text: `${"@" + b.info.username}`, url: `https://t.me/${b.info.username}` }];
+      return [{ text: `${code}`, callback_data: `noop:${code}` }];
+    });
+    await sendMessageViaMain(chatId, lines.join("\n"));
+    await sendMessageViaMain(chatId, "Quick actions:", { inline_keyboard: kb });
   }
 
   /* ================== CALLBACK HANDLER ================== */
@@ -444,24 +490,59 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       return;
     }
 
+    if (action === "noop") { await answerCallback(callbackId, "OK"); return; }
+
     if (action === "cmd") {
-      // start menu button pressed: emulate typing the command (or show dialog)
+      // payload is the command string, e.g. "/mesaj" or "/aktif"
       const cmd = payload || parts[1];
-      if (cmd === "/start") { await answerCallback(callbackId, "OK"); await sendStartCard(chatId, fromId); return; }
-      // For /èd show help text
-      if (cmd === "/èd") { await answerCallback(callbackId, "OK"); await sendHelp(chatId, fromId); return; }
+      await answerCallback(callbackId, "OK");
+      if (cmd === "/start") { await sendStartCard(chatId, fromId); return; }
+      if (cmd === "/èd") { await sendHelp(chatId, fromId); return; }
       if (cmd === "/mesaj") {
-        // start broadcast flow
+        // start broadcast flow (same as typed)
         const pendingId2 = genPendingId();
         const pending = { id: pendingId2, cmd: "broadcast", args: {}, fromId, chatId, createdAt: Date.now() };
         await savePending(fromId, pending);
-        // ask which bot
         const u = await kvGet(`user:${fromId}`);
         if (!u || !u.bots || Object.keys(u.bots).length === 0) { await sendMessageViaMain(chatId, TRANSLATIONS[(u?.lang||'ky')].bot_list_empty); await removePending(fromId, pendingId2); return; }
-        await answerCallback(callbackId, "OK"); await sendMessageViaMain(chatId, TRANSLATIONS[u.lang].choose_bot_prompt, { inline_keyboard: buildBotSelectionKeyboard(u.bots, pendingId2) }); return;
+        await sendMessageViaMain(chatId, TRANSLATIONS[u.lang].choose_bot_prompt, { inline_keyboard: buildBotSelectionKeyboard(u.bots, pendingId2) });
+        return;
       }
-      // default: just answer
-      await answerCallback(callbackId, "OK");
+      if (cmd === "/aktive") {
+        const pendingId2 = genPendingId();
+        const pending = { id: pendingId2, cmd: "activate_flow", args: {}, fromId, chatId, createdAt: Date.now() };
+        await savePending(fromId, pending);
+        const u = await kvGet(`user:${fromId}`);
+        await sendMessageViaMain(chatId, TRANSLATIONS[u.lang].choose_activation_prompt, { inline_keyboard: buildActivationChoiceKeyboard(pending.id, u.lang) });
+        return;
+      }
+      if (cmd === "/bot") {
+        // prompt user to send token textually
+        const u = await kvGet(`user:${fromId}`) || { lang: "ky" };
+        await sendMessageViaMain(chatId, TRANSLATIONS[u.lang].ask_token_format);
+        return;
+      }
+      if (cmd === "/lis_bot") {
+        const u = await kvGet(`user:${fromId}`) || { lang: "ky", bots: {} };
+        await sendBotList(chatId, u);
+        return;
+      }
+      if (cmd === "/sip_bot") {
+        // start revoke flow: choose bot
+        const pendingId2 = genPendingId();
+        const pending = { id: pendingId2, cmd: "revokel", args: {}, fromId, chatId, createdAt: Date.now() };
+        await savePending(fromId, pending);
+        const u = await kvGet(`user:${fromId}`);
+        if (!u || !u.bots || Object.keys(u.bots).length === 0) { await sendMessageViaMain(chatId, TRANSLATIONS[u?.lang||'ky'].bot_list_empty); await removePending(fromId, pendingId2); return; }
+        await sendMessageViaMain(chatId, TRANSLATIONS[u.lang].choose_bot_prompt, { inline_keyboard: buildBotSelectionKeyboard(u.bots, pendingId2) });
+        return;
+      }
+      if (cmd === "/lang") {
+        const u = await kvGet(`user:${fromId}`) || { lang: "ky" };
+        await sendMessageViaMain(chatId, "Use: /lang Kreyòl|Français|English|Español");
+        return;
+      }
+      // unknown cmd-button: nothing
       return;
     }
 
@@ -483,7 +564,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       const pending = await getPending(fromId, pendingId);
       if (!pending) { await answerCallback(callbackId, "Pending expired"); return; }
       pending.args = pending.args || {}; pending.args.code = code;
-      // for broadcast, after confirm: ask for Simple Text or Card
+      // for broadcast: ask type
       if (pending.cmd === "broadcast") {
         pending.state = "awaiting_broadcast_type";
         await savePending(fromId, pending);
@@ -492,7 +573,22 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
         await sendMessageViaMain(chatId, TRANSLATIONS[user.lang].broadcast_choose_type, { inline_keyboard: buildBroadcastTypeKeyboard(pending.id, user.lang) });
         return;
       }
-      // else default execute
+      // for revoke (sip_bot) -> execute removal
+      if (pending.cmd === "revokel" || pending.cmd === "sip_bot") {
+        // remove bot
+        const u = await kvGet(`user:${fromId}`);
+        if (u && u.bots && u.bots[code]) {
+          delete u.bots[code];
+          await kvPut(`user:${fromId}`, u);
+          await answerCallback(callbackId, "Confirmed");
+          await sendMessageViaMain(chatId, `Bot ${code} removed from your list.`);
+        } else {
+          await answerCallback(callbackId, "Confirmed");
+          await sendMessageViaMain(chatId, TRANSLATIONS[u?.lang || 'ky'].bot_list_empty);
+        }
+        await removePending(fromId, pending.id);
+        return;
+      }
       await answerCallback(callbackId, "Confirmed"); await executePending(fromId, pending); return;
     }
 
@@ -519,6 +615,17 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
         await sendMessageViaMain(chatId, TRANSLATIONS[user.lang].broadcast_send_prompt_text);
         return;
       }
+    }
+
+    if (action === "yow") {
+      // handle Yow button click
+      const exp = expandCallbackKey(payload);
+      const pendingId2 = exp ? exp.pendingId : payload;
+      // who clicked:
+      const who = cb.from && (cb.from.username ? "@" + cb.from.username : (cb.from.first_name || String(cb.from.id)));
+      await answerCallback(callbackId, "Clicked");
+      if (chatId) await sendMessageViaMain(chatId, `${who} clicked Yow`);
+      return;
     }
 
     await answerCallback(callbackId, "Unknown callback");
@@ -567,12 +674,12 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       awaitingBroadcastText.args.text = text;
       awaitingBroadcastText.state = "confirmed";
       await savePending(userId, awaitingBroadcastText);
+      // attach bot code already set on confirm stage
       await executePending(userId, awaitingBroadcastText);
       return;
     }
     const awaitingBroadcastCard = await findPendingByState(userId, "awaiting_broadcast_card");
     if (!msg.photo && awaitingBroadcastCard && awaitingBroadcastCard.cmd === "broadcast" && text) {
-      // expect Title|Body or multi-line
       let title = "", body = "";
       if (text.includes("|")) {
         const [t, ...rest] = text.split("|");
@@ -581,7 +688,6 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
         const parts = text.split("\n");
         title = parts[0].trim(); body = parts.slice(1).join("\n").trim();
       } else {
-        // single line -> title only, body empty
         title = text.trim(); body = "";
       }
       awaitingBroadcastCard.args = awaitingBroadcastCard.args || {};
@@ -593,7 +699,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       return;
     }
 
-    // if photo -> create pending for foto (reuse existing code pattern if needed)
+    // photo -> reuse earlier foto flow if needed
     if (msg.photo && msg.photo.length) {
       const photoObj = msg.photo[msg.photo.length - 1];
       const fileId = photoObj.file_id;
@@ -624,7 +730,6 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
 
     if (cmd === "/èd") { await sendHelp(chatId, userId); return; }
 
-    // bot register
     if (cmd === "/bot" || cmd === "/nouvo_bot") {
       const token = parts[1] || "";
       if (!token) { await sendMessageViaMain(chatId, TRANSLATIONS[lang].ask_token_format); return; }
@@ -632,22 +737,22 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     }
 
     if (cmd === "/lis_bot" || cmd === "/bot_mw") {
-      const entries = Object.entries(user.bots || {});
-      if (!entries.length) { await sendMessageViaMain(chatId, TRANSLATIONS[lang].bot_list_empty); return; }
-      const lines = entries.map(([code, b]) => { const uname = b.info?.username ? "@" + b.info.username : "(no username)"; return `${uname} — ${code}`; });
-      // quick action keyboard
-      const kb = entries.map(([code, b]) => {
-        if (b.info?.username) return [{ text: `Open ${"@" + b.info.username}`, url: `https://t.me/${b.info.username}` }];
-        return [{ text: `${code}`, callback_data: `noop:${code}` }];
-      });
-      await sendMessageViaMain(chatId, lines.join("\n"));
-      await sendMessageViaMain(chatId, "Quick actions:", { inline_keyboard: kb });
+      await sendBotList(chatId, user);
       return;
     }
 
     if (cmd === "/sip_bot" || cmd === "/revokel") {
       const code = parts[1] || "";
-      if (!code) { await sendMessageViaMain(chatId, "Use: /sip_bot <CODE>"); return; }
+      if (!code) {
+        // start selection flow
+        const pendingId = genPendingId();
+        const pending = { id: pendingId, cmd: "revokel", args: {}, fromId: userId, chatId, createdAt: Date.now() };
+        await savePending(userId, pending);
+        if (!user.bots || Object.keys(user.bots).length === 0) { await sendMessageViaMain(chatId, TRANSLATIONS[lang].bot_list_empty); await removePending(userId, pendingId); return; }
+        const kb = buildBotSelectionKeyboard(user.bots, pendingId);
+        await sendMessageViaMain(chatId, TRANSLATIONS[lang].choose_bot_prompt, { inline_keyboard: kb });
+        return;
+      }
       if (!user.bots || !user.bots[code]) { await sendMessageViaMain(chatId, TRANSLATIONS[lang].bot_list_empty); return; }
       delete user.bots[code];
       await kvPut("user:" + userId, user);
@@ -656,7 +761,6 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     }
 
     if (cmd === "/mesaj") {
-      // start broadcast flow
       const pendingId = genPendingId();
       const pending = { id: pendingId, cmd: "broadcast", args: {}, fromId: userId, chatId, createdAt: Date.now() };
       await savePending(userId, pending);
@@ -694,11 +798,6 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     if (["english","en","ang"].includes(s)) return "en";
     if (["español","espanol","es","spanish"].includes(s)) return "es";
     return null;
-  }
-
-  function escapeHtml(unsafe) {
-    if (!unsafe) return "";
-    return unsafe.replace(/[&<>"']/g, function(m) { return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' })[m]; });
   }
 
 } // end guard
