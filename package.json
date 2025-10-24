@@ -1,0 +1,7 @@
+{
+  "name": "tg-ping-bot",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "echo \"no build needed\""
+  }
+}
