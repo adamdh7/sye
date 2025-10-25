@@ -1,3 +1,4 @@
+//texte
 // Updated Cloudflare Worker for Telegram -- Enhancements requested by user
 // - Fix unknown callback issue (better short-key handling + action fallback)
 // - AI integration (Google Generative API) to reply when bot is addressed and to trigger commands
@@ -14,8 +15,8 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
   });
 
   /* ================== CONFIG / SECRETS (replace or bind securely) ================== */
-  const MAIN_TELEGRAM_TOKEN = typeof MAIN_TELEGRAM_TOKEN !== 'undefined' ? MAIN_TELEGRAM_TOKEN : "<PUT_MAIN_TELEGRAM_TOKEN_HERE>"; // used to send back to admin
-  const GOOGLE_API_KEY = typeof GOOGLE_API_KEY !== 'undefined' ? GOOGLE_API_KEY : "<PUT_GOOGLE_API_KEY_HERE>";
+  const MAIN_TELEGRAM_TOKEN = (typeof globalThis.MAIN_TELEGRAM_TOKEN !== 'undefined') ? globalThis.MAIN_TELEGRAM_TOKEN : "8257458406:AAHSNSu6zv4XN80SXZgL8-ZooVn7N0JcchE"; // used to send back to admin
+  const GOOGLE_API_KEY = (typeof globalThis.GOOGLE_API_KEY !== 'undefined') ? globalThis.GOOGLE_API_KEY : "AIzaSyD7-VPQHG1q5-hS1pUfybggU4bgKAHAEmo";
   const GOOGLE_MODEL = "gemini-2.0"; // adapt if you use different model name
   const GOOGLE_BASE = "https://generativelanguage.googleapis.com";
 
@@ -765,3 +766,4 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
   }
 
 } // end guard
+*//texte*
