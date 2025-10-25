@@ -11,9 +11,8 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
   const GOOGLE_BASE = "https://generativelanguage.googleapis.com";
   const MAIN_TELEGRAM_API = `https://api.telegram.org/bot${MAIN_TELEGRAM_TOKEN}`;
 
-  const MEMORY_DB = { users: {}, pending: {}, subscribers: [] };
+  const MEMORY_DB = { users: {}, pending: {}, subscribers: [], usersByUsername: {} };
 
-  /* KV helpers (try bound USER_BOTS_KV; fallback memory) */
   async function kvGetRaw(key) {
     if (typeof USER_BOTS_KV !== "undefined" && USER_BOTS_KV && USER_BOTS_KV.get) {
       try { return await USER_BOTS_KV.get(key); } catch (e) { console.log('KV GET ERR', key, e && e.message); }
@@ -21,7 +20,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     if (key === "subscribers") return JSON.stringify(MEMORY_DB.subscribers);
     if (key.startsWith("user:")) return JSON.stringify(MEMORY_DB.users[key.split(":")[1]] || null);
     if (key.startsWith("pending:")) return JSON.stringify(MEMORY_DB.pending[key.split(":")[1]] || null);
-    if (key.startsWith("botByUsername:")) return JSON.stringify(MEMORY_DB.usersByUsername && MEMORY_DB.usersByUsername[key.split(":")[1]] || null);
+    if (key.startsWith("botByUsername:")) return JSON.stringify(MEMORY_DB.usersByUsername[key.split(":")[1]] || null);
     return null;
   }
   async function kvGet(key) {
@@ -36,11 +35,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     if (key === "subscribers") { MEMORY_DB.subscribers = value; return true; }
     if (key.startsWith("user:")) { MEMORY_DB.users[key.split(":")[1]] = value; return true; }
     if (key.startsWith("pending:")) { MEMORY_DB.pending[key.split(":")[1]] = value; return true; }
-    if (key.startsWith("botByUsername:")) {
-      MEMORY_DB.usersByUsername = MEMORY_DB.usersByUsername || {};
-      MEMORY_DB.usersByUsername[key.split(":")[1]] = value;
-      return true;
-    }
+    if (key.startsWith("botByUsername:")) { MEMORY_DB.usersByUsername[key.split(":")[1]] = value; return true; }
     return false;
   }
   async function kvDelete(key) {
@@ -50,7 +45,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     if (key === "subscribers") { MEMORY_DB.subscribers = []; return true; }
     if (key.startsWith("user:")) { delete MEMORY_DB.users[key.split(":")[1]]; return true; }
     if (key.startsWith("pending:")) { delete MEMORY_DB.pending[key.split(":")[1]]; return true; }
-    if (key.startsWith("botByUsername:")) { if (MEMORY_DB.usersByUsername) delete MEMORY_DB.usersByUsername[key.split(":")[1]]; return true; }
+    if (key.startsWith("botByUsername:")) { delete MEMORY_DB.usersByUsername[key.split(":")[1]]; return true; }
     return false;
   }
 
@@ -66,7 +61,6 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
   function findFirstUsername(text) { const m = text.match(/@([a-z0-9_]{5,})/i); return m ? m[1] : null; }
   function findAllUrls(text) { const r = text.match(/https?:\/\/\S+/ig); return r || []; }
 
-  /* Telegram API helper with logging */
   async function callBotApiWithToken(token, method, body = {}) {
     const url = `https://api.telegram.org/bot${token}/${method}`;
     const opts = { method: "POST" };
@@ -76,7 +70,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       const res = await fetch(url, opts);
       let data = null;
       try { data = await res.json(); } catch (e) { data = null; }
-      console.log('BOT API', method, 'status', res.status, 'ok', res.ok, 'data', data);
+      console.log('BOT API', method, 'status', res.status, 'ok', res.ok, 'data', data && (typeof data === 'object' ? (data.description || data.result || JSON.stringify(data).slice(0,200)) : data));
       return { ok: res.ok, status: res.status, data };
     } catch (e) {
       console.log('BOT API FETCH ERR', method, e && e.message);
@@ -85,9 +79,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
   }
 
   async function getMe(token) {
-    const r = await callBotApiWithToken(token, "getMe", {});
-    if (!r.ok || !r.data || !r.data.ok) return null;
-    return r.data; // caller expects .result
+    return await callBotApiWithToken(token, "getMe", {});
   }
 
   async function sendMessageViaMain(chatId, text, options = {}) {
@@ -96,14 +88,14 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     if (options.parse_mode) payload.parse_mode = options.parse_mode;
     try {
       const res = await fetch(`${MAIN_TELEGRAM_API}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      try { const d = await res.json(); console.log('SEND MAIN', res.status, d); } catch(e){}
+      try { const d = await res.json(); console.log('SEND MAIN', res.status, d && (d.description || JSON.stringify(d).slice(0,200))); } catch(e){}
     } catch (e) { console.log("sendMessageViaMain error", e && e.message); }
   }
 
   async function answerCallback(callbackQueryId, text = "") {
     try {
       const res = await fetch(`${MAIN_TELEGRAM_API}/answerCallbackQuery`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ callback_query_id: callbackQueryId, text, show_alert: false }) });
-      try { const d = await res.json(); console.log('ANSWER CALLBACK', callbackQueryId, d); } catch(e){}
+      try { const d = await res.json(); console.log('ANSWER CALLBACK', callbackQueryId, d && d.description); } catch(e){}
     } catch (e) { console.log("answerCallback error", e && e.message); }
   }
 
@@ -131,23 +123,38 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
   }
   async function getSubscribers() { return (await kvGet("subscribers")) || []; }
 
-  /* Google AI call with logging */
   async function callGoogleAI(prompt, systemPrompt = "You are a helpful assistant.") {
     if (!GOOGLE_API_KEY || GOOGLE_API_KEY.startsWith("<")) return { ok: false, error: "Google API key not configured" };
     try {
       const url = `${GOOGLE_BASE}/v1beta2/models/${GOOGLE_MODEL}:generateText?key=${GOOGLE_API_KEY}`;
       const body = { prompt: { text: `${systemPrompt}\n\n${prompt}` }, maxOutputTokens: 512 };
       const r = await fetch(url, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(body) });
-      const raw = await r.clone().text();
-      console.log('GOOGLE AI HTTP', r.status, raw.slice(0,1000));
-      const j = await r.json();
+      const rawText = await r.clone().text();
+      console.log('GOOGLE AI HTTP', r.status, rawText.slice(0,1200));
+      let j;
+      try { j = await r.json(); } catch(e){ return { ok:false, error: 'Invalid JSON from Google' }; }
       if (!r.ok) return { ok: false, error: j };
-      const txt = j.candidates && j.candidates[0] && j.candidates[0].content ? j.candidates[0].content : (j.output && j.output[0] && j.output[0].text ? j.output[0].text : '');
+      let txt = "";
+      if (j.candidates && j.candidates[0]) {
+        const c = j.candidates[0].content;
+        if (typeof c === 'string') txt = c;
+        else if (Array.isArray(c) && c.length && c[0].text) txt = c[0].text;
+      }
+      if (!txt && j.output && Array.isArray(j.output) && j.output[0]) {
+        if (j.output[0].content) {
+          const c = j.output[0].content;
+          if (typeof c === 'string') txt = c;
+          else if (Array.isArray(c) && c.length && c[0].text) txt = c[0].text;
+        }
+        if (!txt && j.output_text) txt = j.output_text;
+      }
+      if (!txt && j.generated_text) txt = j.generated_text;
+      if (!txt && j.text) txt = j.text;
+      if (!txt) txt = JSON.stringify(j).slice(0,2000);
       return { ok: true, text: String(txt) };
     } catch (e) { console.log('GOOGLE AI ERR', e && e.message); return { ok: false, error: e && e.message ? e.message : String(e) }; }
   }
 
-  /* Executor unchanged (keeps logging in callBotApiWithToken) */
   async function executeCommandAsBot(bot, ctx, cmdText) {
     try {
       const token = bot.token;
@@ -290,7 +297,101 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     try {
       if (action === "cancel") { await removePending(fromId, pendingId || payload); await answerCallback(callbackId, "Cancelled"); if (chatId) await sendMessageViaMain(chatId, "Action cancelled."); return; }
       if (action === "noop") { await answerCallback(callbackId, "OK"); return; }
-      // rest unchanged...
+      if (action === "cmd") {
+        await answerCallback(callbackId, "OK");
+        const cmd = payload || data.split(':')[1];
+        if (cmd === "/start") { await sendStartCard(chatId, fromId); return; }
+        if (cmd === "/èd") { await sendHelp(chatId, fromId); return; }
+        if (cmd === "/mesaj") {
+          const pendingId2 = genPendingId();
+          const pending = { id: pendingId2, cmd: "broadcast", args: {}, fromId, chatId, createdAt: Date.now() };
+          await savePending(fromId, pending);
+          const u = await kvGet(`user:${fromId}`);
+          if (!u || !u.bots || Object.keys(u.bots).length === 0) { await sendMessageViaMain(chatId, TRANSLATIONS[(u?.lang||'ky')].bot_list_empty); await removePending(fromId, pendingId2); return; }
+          await sendMessageViaMain(chatId, TRANSLATIONS[u.lang].choose_bot_prompt, { inline_keyboard: buildBotSelectionKeyboard(u.bots, pendingId2) });
+          return;
+        }
+        return;
+      }
+      if (action === "pick") {
+        const code = codeOrSuffix || payload;
+        const pending = await getPending(fromId, pendingId || payload);
+        if (!pending) { await answerCallback(callbackId, "Pending expired"); return; }
+        const user = await kvGet(`user:${fromId}`);
+        const bot = user?.bots?.[code];
+        const label = bot?.info?.username ? "@" + bot.info.username : code;
+        const kb = buildConfirmKeyboard(pendingId || payload, code);
+        await answerCallback(callbackId, `Selected ${label}`);
+        if (chatId) await sendMessageViaMain(chatId, `${TRANSLATIONS[user.lang].confirm_prompt} ${label}`, { inline_keyboard: kb });
+        return;
+      }
+      if (action === "confirm") {
+        const code = codeOrSuffix || payload;
+        const pending = await getPending(fromId, pendingId || payload);
+        if (!pending) { await answerCallback(callbackId, "Pending expired"); return; }
+        pending.args = pending.args || {}; pending.args.code = code;
+        if (pending.cmd === "broadcast") {
+          pending.state = "awaiting_broadcast_type";
+          await savePending(fromId, pending);
+          const user = await kvGet(`user:${fromId}`);
+          await answerCallback(callbackId, "Confirmed");
+          await sendMessageViaMain(chatId, TRANSLATIONS[user.lang].broadcast_choose_type, { inline_keyboard: buildBroadcastTypeKeyboard(pending.id, user.lang) });
+          return;
+        }
+        if (pending.cmd === "revokel" || pending.cmd === "sip_bot") {
+          const u = await kvGet(`user:${fromId}`);
+          if (u && u.bots && u.bots[code]) {
+            delete u.bots[code];
+            await kvPut(`user:${fromId}`, u);
+            await answerCallback(callbackId, "Confirmed");
+            await sendMessageViaMain(chatId, `Bot ${code} removed from your list.`);
+          } else {
+            await answerCallback(callbackId, "Confirmed");
+            await sendMessageViaMain(chatId, TRANSLATIONS[u?.lang || 'ky'].bot_list_empty);
+          }
+          await removePending(fromId, pending.id);
+          return;
+        }
+        await answerCallback(callbackId, "Confirmed"); await executePending(fromId, pending); return;
+      }
+      if (action === "btype") {
+        const exp = expandCallbackKey(payload);
+        const pendingId2 = exp ? exp.pendingId : payload;
+        const typeChoice = exp ? exp.suffix : null;
+        const pending = await getPending(fromId, pendingId2);
+        if (!pending) { await answerCallback(callbackId, "Pending expired"); return; }
+        pending.args = pending.args || {};
+        pending.args.broadcastMode = typeChoice;
+        if ((typeChoice || "").toLowerCase().startsWith("card")) {
+          pending.state = "awaiting_broadcast_card";
+          await savePending(fromId, pending);
+          await answerCallback(callbackId, `Selected ${typeChoice}`);
+          const user = await kvGet(`user:${fromId}`);
+          await sendMessageViaMain(chatId, TRANSLATIONS[user.lang].broadcast_send_prompt_card);
+          return;
+        } else {
+          pending.state = "awaiting_broadcast_text";
+          await savePending(fromId, pending);
+          await answerCallback(callbackId, `Selected ${typeChoice}`);
+          const user = await kvGet(`user:${fromId}`);
+          await sendMessageViaMain(chatId, TRANSLATIONS[user.lang].broadcast_send_prompt_text);
+          return;
+        }
+      }
+      if (action === "yow") {
+        const exp = expandCallbackKey(payload);
+        const who = cb.from && (cb.from.username ? "@" + cb.from.username : (cb.from.first_name || String(cb.from.id)));
+        await answerCallback(callbackId, "Clicked");
+        if (chatId) await sendMessageViaMain(chatId, `${who} clicked Yow`);
+        return;
+      }
+      if (action === 'touch') {
+        const exp = expandCallbackKey(payload);
+        const suffix = exp ? exp.suffix : payload;
+        await answerCallback(callbackId, 'Touch received');
+        if (chatId) await sendMessageViaMain(chatId, `Touch: ${suffix}`);
+        return;
+      }
       await answerCallback(callbackId, "Unknown callback");
     } catch (e) { console.error('callback handler error', e); await answerCallback(callbackId, 'Error'); }
   }
@@ -301,7 +402,6 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     const kb = TRANSLATIONS[lang]?.start_buttons;
     await sendMessageViaMain(chatId, TRANSLATIONS[lang]?.menu_title || "Menu", { inline_keyboard: kb });
   }
-
   async function sendHelp(chatId, fromId) {
     const user = await kvGet(`user:${fromId}`) || { lang: "ky" };
     const lang = user.lang || "ky";
@@ -324,24 +424,95 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     if (!user) { user = { lang: "ky", bots: {} }; await kvPut("user:" + userId, user); }
     const lang = user.lang || "ky";
 
-    // pending flows + photo flows (unchanged) ...
-    // (omitted for brevity in this snippet; keep same logic as original)
+    const awaitingBroadcastText = await findPendingByState(userId, "awaiting_broadcast_text");
+    if (!msg.photo && awaitingBroadcastText && awaitingBroadcastText.cmd === "broadcast" && text) {
+      awaitingBroadcastText.args = awaitingBroadcastText.args || {};
+      awaitingBroadcastText.args.text = text;
+      awaitingBroadcastText.state = "confirmed";
+      await savePending(userId, awaitingBroadcastText);
+      await executePending(userId, awaitingBroadcastText);
+      return;
+    }
+    const awaitingBroadcastCard = await findPendingByState(userId, "awaiting_broadcast_card");
+    if (!msg.photo && awaitingBroadcastCard && awaitingBroadcastCard.cmd === "broadcast" && text) {
+      let title = "", body = "";
+      if (text.includes("|")) {
+        const [t, ...rest] = text.split("|");
+        title = t.trim(); body = rest.join("|").trim();
+      } else if (text.includes("\n")) {
+        const parts = text.split("\n");
+        title = parts[0].trim(); body = parts.slice(1).join("\n").trim();
+      } else {
+        title = text.trim(); body = "";
+      }
+      awaitingBroadcastCard.args = awaitingBroadcastCard.args || {};
+      awaitingBroadcastCard.args.cardTitle = title;
+      awaitingBroadcastCard.args.cardBody = body;
+      awaitingBroadcastCard.state = "confirmed";
+      await savePending(userId, awaitingBroadcastCard);
+      await executePending(userId, awaitingBroadcastCard);
+      return;
+    }
 
-    // token registration
+    if (msg.photo && msg.photo.length) {
+      const photoObj = msg.photo[msg.photo.length - 1];
+      const fileId = photoObj.file_id;
+      const pendingId = genPendingId();
+      const pending = { id: pendingId, cmd: "foto", args: { file_id: fileId }, fromId: userId, chatId, createdAt: Date.now() };
+      await savePending(userId, pending);
+      if (!user.bots || Object.keys(user.bots).length === 0) { await sendMessageViaMain(chatId, TRANSLATIONS[lang]?.bot_list_empty || "No bots"); await removePending(userId, pendingId); return; }
+      const kb = buildBotSelectionKeyboard(user.bots, pendingId);
+      await sendMessageViaMain(chatId, TRANSLATIONS[lang]?.choose_bot_prompt || "Choose bot:", { inline_keyboard: kb }); return;
+    }
+
     if (isProbablyToken(text)) { return await registerNewBotFlow(userId, chatId, text, lang); }
 
     const parts = text.split(" ").filter(Boolean);
     const cmd = (parts[0] || "").toLowerCase();
 
-    // simple commands (unchanged)...
     if (cmd === "/start") { await sendStartCard(chatId, userId); return; }
-    if (cmd === "/lang") { const raw = parts.slice(1).join(" "); const mapped = mapLangInputToCode(raw); if (!mapped) { await sendMessageViaMain(chatId, "Use: /lang Kreyòl|Français|English|Español"); return; } user.lang = mapped; await kvPut("user:" + userId, user); await sendMessageViaMain(chatId, `${TRANSLATIONS[mapped]?.name || mapped} selected.`); return; }
+    if (cmd === "/lang") {
+      const raw = parts.slice(1).join(" ");
+      const mapped = mapLangInputToCode(raw);
+      if (!mapped) { await sendMessageViaMain(chatId, "Use: /lang Kreyòl|Français|English|Español"); return; }
+      user.lang = mapped; await kvPut("user:" + userId, user);
+      await sendMessageViaMain(chatId, `${TRANSLATIONS[mapped]?.name || mapped} selected.`);
+      return;
+    }
     if (cmd === "/èd") { await sendHelp(chatId, userId); return; }
-    if (cmd === "/bot" || cmd === "/nouvo_bot") { const token = parts[1] || ""; if (!token) { await sendMessageViaMain(chatId, TRANSLATIONS[lang]?.ask_token_format || "Provide token"); return; } return await registerNewBotFlow(userId, chatId, token, lang); }
+    if (cmd === "/bot" || cmd === "/nouvo_bot") {
+      const token = parts[1] || "";
+      if (!token) { await sendMessageViaMain(chatId, TRANSLATIONS[lang]?.ask_token_format || "Provide token"); return; }
+      return await registerNewBotFlow(userId, chatId, token, lang);
+    }
     if (cmd === "/lis_bot" || cmd === "/bot_mw") { await sendBotList(chatId, user); return; }
-    if (cmd === "/mesaj") { const pendingId = genPendingId(); const pending = { id: pendingId, cmd: "broadcast", args: {}, fromId: userId, chatId, createdAt: Date.now() }; await savePending(userId, pending); if (!user.bots || Object.keys(user.bots).length === 0) { await sendMessageViaMain(chatId, TRANSLATIONS[lang]?.bot_list_empty || "No bots"); await removePending(userId, pendingId); return; } const kb = buildBotSelectionKeyboard(user.bots, pendingId); await sendMessageViaMain(chatId, TRANSLATIONS[lang]?.choose_bot_prompt || "Choose bot:", { inline_keyboard: kb }); return; }
+    if (cmd === "/sip_bot" || cmd === "/revokel") {
+      const code = parts[1] || "";
+      if (!code) {
+        const pendingId = genPendingId();
+        const pending = { id: pendingId, cmd: "revokel", args: {}, fromId: userId, chatId, createdAt: Date.now() };
+        await savePending(userId, pending);
+        if (!user.bots || Object.keys(user.bots).length === 0) { await sendMessageViaMain(chatId, TRANSLATIONS[lang]?.bot_list_empty || "No bots"); await removePending(userId, pendingId); return; }
+        const kb = buildBotSelectionKeyboard(user.bots, pendingId);
+        await sendMessageViaMain(chatId, TRANSLATIONS[lang]?.choose_bot_prompt || "Choose bot:", { inline_keyboard: kb });
+        return;
+      }
+      if (!user.bots || !user.bots[code]) { await sendMessageViaMain(chatId, TRANSLATIONS[lang]?.bot_list_empty || "No bots"); return; }
+      delete user.bots[code];
+      await kvPut("user:" + userId, user);
+      await sendMessageViaMain(chatId, `Bot ${code} removed from your list.`);
+      return;
+    }
+    if (cmd === "/mesaj") {
+      const pendingId = genPendingId();
+      const pending = { id: pendingId, cmd: "broadcast", args: {}, fromId: userId, chatId, createdAt: Date.now() };
+      await savePending(userId, pending);
+      if (!user.bots || Object.keys(user.bots).length === 0) { await sendMessageViaMain(chatId, TRANSLATIONS[lang]?.bot_list_empty || "No bots"); await removePending(userId, pendingId); return; }
+      const kb = buildBotSelectionKeyboard(user.bots, pendingId);
+      await sendMessageViaMain(chatId, TRANSLATIONS[lang]?.choose_bot_prompt || "Choose bot:", { inline_keyboard: kb });
+      return;
+    }
 
-    // AI trigger: try KV mapping first
     const mentioned = findFirstUsername(text);
     let matchedBot = null;
     if (mentioned) {
@@ -350,7 +521,6 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
         const owner = await kvGet(`user:${rec.owner}`);
         if (owner && owner.bots && owner.bots[rec.code]) matchedBot = owner.bots[rec.code];
       } else {
-        // fallback to memory scan (best-effort)
         for (const uid of Object.keys(MEMORY_DB.users)) {
           const u = MEMORY_DB.users[uid];
           if (!u || !u.bots) continue;
@@ -363,7 +533,6 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     }
     if (!matchedBot) {
       const lower = text.toLowerCase();
-      // search KV index is better but fallback to memory
       for (const uid of Object.keys(MEMORY_DB.users)) {
         const u = MEMORY_DB.users[uid];
         if (!u || !u.bots) continue;
@@ -381,8 +550,9 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       const aiConfig = matchedBot.aiConfig || { prompt: `Se yon asistan: reponn kout ak klè.`, name: (matchedBot.info?.username ? '@'+matchedBot.info.username : matchedBot.code) };
       const prompt = `User: ${msg.from.username || msg.from.first_name || msg.from.id} in chat ${chatId}\nMessage: ${text}\n\nRespond as ${aiConfig.name}. If you should perform an action on Telegram, output a single line starting with CMD: followed by the exact command (example: CMD:/sip reply). Otherwise reply normally.`;
       const aiRes = await callGoogleAI(prompt, aiConfig.prompt || `You are ${aiConfig.name} a Telegram bot helper.`);
-      if (!aiRes.ok) { await sendMessageViaMain(chatId, `AI error: ${aiRes.error}`); return; }
+      if (!aiRes.ok) { console.log('AI CALL FAILED', aiRes.error); await sendMessageViaMain(chatId, `AI error: ${String(aiRes.error).slice(0,800)}`); return; }
       const replyText = String(aiRes.text || '').trim();
+      if (!replyText) { console.log('AI returned empty text', aiRes); await sendMessageViaMain(chatId, 'AI returned empty response'); return; }
       console.log('AI REPLY', replyText.slice(0,1000));
       if (replyText.startsWith('CMD:')) {
         const cmdLine = replyText.split('\n')[0].slice(4).trim();
@@ -407,7 +577,13 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     let user = await kvGet("user:" + userId);
     if (!user) user = { lang: "ky", bots: {} };
     const code = makeUniqueBotCode(user, botUser);
-    user.bots[code] = { token, info: botUser, active: true, createdAt: Date.now(), code, mode: "bot", aiConfig: null };
+
+    const defaultAi = {
+      prompt: `Se yon asistan kout; reponn kout, klè, san fache. Si komann nesesè, retounen "CMD:/sip reply" oswa "CMD:/sipli <id>".`,
+      name: botUser.username ? '@' + botUser.username : code
+    };
+
+    user.bots[code] = { token, info: botUser, active: true, createdAt: Date.now(), code, mode: "bot", aiConfig: defaultAi };
     await kvPut("user:" + userId, user);
     if (botUser.username) await kvPut(`botByUsername:${botUser.username.toLowerCase()}`, { owner: userId, code });
     const username = botUser.username ? "@" + botUser.username : botUser.first_name || code;
@@ -452,4 +628,5 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     if (["español","espanol","es","spanish"].includes(s)) return "es";
     return null;
   }
-  }
+}
+```0
