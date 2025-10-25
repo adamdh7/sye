@@ -1,4 +1,5 @@
-// Telegram Worker — korije & amelyore (AI + commands + cards + kv fallback)
+// Telegram Worker — Version finale corrigée (AI, callbacks deterministic, commands, card layout)
+// NOTE: Replace tokens/keys or bind them securely in Cloudflare Worker settings if you prefer.
 if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
   globalThis.__TERGENE_WORKER_INITIALIZED = true;
 
@@ -6,18 +7,17 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     event.respondWith(handleRequest(event.request));
   });
 
-  /* ========== CONFIG / SECRETS ========== */
-  // NOTE: If these are exposed publicly, regenerate them now.
+  /* ================== CONFIG / SECRETS ================== */
   const MAIN_TELEGRAM_TOKEN = (typeof globalThis.MAIN_TELEGRAM_TOKEN !== 'undefined') ? globalThis.MAIN_TELEGRAM_TOKEN : "8346530009:AAG6gd7P8yjtCyI4Tf258Fth7FayMJl0sr8";
   const GOOGLE_API_KEY = (typeof globalThis.GOOGLE_API_KEY !== 'undefined') ? globalThis.GOOGLE_API_KEY : "AIzaSyD7-VPQHG1q5-hS1pUfybggU4bgKAHAEmo";
   const GOOGLE_MODEL = "gemini-2.0-flash";
   const GOOGLE_BASE = "https://generativelanguage.googleapis.com";
   const MAIN_TELEGRAM_API = `https://api.telegram.org/bot${MAIN_TELEGRAM_TOKEN}`;
 
-  /* ========== IN-MEM Fallback DB ========== */
+  /* ================== SIMPLE IN-MEM DB (fallback) ================== */
   const MEMORY_DB = { users: {}, pending: {}, subscribers: [], botByUsername: {} };
 
-  /* ========== KV WRAPPERS (USER_BOTS_KV optional) ========== */
+  /* ================== KV WRAPPERS (USE USER_BOTS_KV IF BOUND) ================== */
   async function kvGetRaw(key) {
     if (typeof USER_BOTS_KV !== "undefined" && USER_BOTS_KV && USER_BOTS_KV.get) {
       try { return await USER_BOTS_KV.get(key); } catch (e) { console.log('KV GET ERR', key, e && e.message); }
@@ -54,7 +54,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     return false;
   }
 
-  /* ========== UTILITIES ========== */
+  /* ================== UTILITIES ================== */
   function isProbablyToken(text) { return /^\d+:[A-Za-z0-9_-]{35,}$/.test(text); }
   function genPendingId() { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`; }
   function makeUniqueBotCode(user, botUser) {
@@ -68,7 +68,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
   function findAllUrls(text) { const r = text.match(/https?:\/\/\S+/ig); return r || []; }
   function findFirstUrl(text) { const m = text.match(/https?:\/\/\S+/i); return m ? m[0] : null; }
 
-  /* ========== TELEGRAM API HELPERS (with logs) ========== */
+  /* ================== TELEGRAM API HELPERS ================== */
   async function callBotApiWithToken(token, method, body = {}) {
     const url = `https://api.telegram.org/bot${token}/${method}`;
     const opts = { method: "POST" };
@@ -78,18 +78,16 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       const res = await fetch(url, opts);
       let data = null;
       try { data = await res.json(); } catch (e) { data = null; }
-      console.log('BOT API', method, 'status', res.status, 'ok', res.ok, 'desc', data && data.description);
+      console.log('BOT API', method, 'status', res.status, data && data.description);
       return { ok: res.ok, status: res.status, data };
     } catch (e) {
       console.log('BOT API FETCH ERR', method, e && e.message);
       return { ok: false, error: e && e.message ? e.message : String(e) };
     }
   }
-
   async function getMe(token) {
     return await callBotApiWithToken(token, "getMe", {});
   }
-
   async function sendMessageViaMain(chatId, text, options = {}) {
     const payload = { chat_id: chatId, text };
     if (options.inline_keyboard) payload.reply_markup = { inline_keyboard: options.inline_keyboard };
@@ -99,7 +97,6 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       try { const d = await res.json(); console.log('SEND MAIN', res.status, d && d.description); } catch(e){}
     } catch (e) { console.log("sendMessageViaMain error", e && e.message); }
   }
-
   async function answerCallback(callbackQueryId, text = "") {
     try {
       const res = await fetch(`${MAIN_TELEGRAM_API}/answerCallbackQuery`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ callback_query_id: callbackQueryId, text, show_alert: false }) });
@@ -107,7 +104,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     } catch (e) { console.log("answerCallback error", e && e.message); }
   }
 
-  /* ========== TRANSLATIONS (same as you gave, trimmed if needed) ========== */
+  /* ================== TRANSLATIONS (Kreyòl / EN minimal) ================== */
   const TRANSLATIONS = {
     ky: {
       name: "Kreyòl",
@@ -132,19 +129,45 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       broadcast_done: "Mesaj voye bay tout abonnés.",
       unknown_cmd: "Kòmand pa rekonèt. Sèvi ak /start pou meni."
     },
-    en: { name:"English", menu_title:"Main menu:", start_buttons: [], token_checking:"Checking token...", token_invalid:"Token invalid or API error.", created_bot:"Bot registered:", bot_list_empty:"You have no registered bots.", choose_bot_prompt:"Choose bot for this action.", confirm_prompt:"Please confirm action for", broadcast_choose_type:"How do you want to send the message? Simple Text or Card?", broadcast_options:["Simple Text","Card"], broadcast_send_prompt_text:"Send the text now.", broadcast_send_prompt_card:"Send the card as: Title|Body", broadcast_done:"Message sent.", unknown_cmd:"Unknown command. Use /start." }
+    en: {
+      name: "English",
+      menu_title: "Main menu:",
+      start_buttons: [
+        [ { text: "/lang", callback_data: "cmd:/lang" }, { text: "/aktive", callback_data: "cmd:/aktive" } ],
+        [ { text: "/èd", callback_data: "cmd:/èd" }, { text: "/bot", callback_data: "cmd:/bot" } ],
+        [ { text: "/sip_bot", callback_data: "cmd:/sip_bot" }, { text: "/lis_bot", callback_data: "cmd:/lis_bot" } ],
+        [ { text: "/mesaj", callback_data: "cmd:/mesaj" } ]
+      ],
+      token_checking: "Checking token...",
+      token_invalid: "Token invalid or API error.",
+      created_bot: "Bot registered:",
+      bot_list_empty: "You have no registered bots.",
+      choose_bot_prompt: "Choose bot for this action.",
+      confirm_prompt: "Please confirm action for",
+      broadcast_choose_type: "How do you want to send the message? Simple Text or Card?",
+      broadcast_options: ["Simple Text","Card"],
+      broadcast_send_prompt_text: "Send the text now.",
+      broadcast_send_prompt_card: "Send the card as: Title|Body",
+      broadcast_done: "Message sent to all subscribers.",
+      unknown_cmd: "Unknown command. Use /start for the menu."
+    }
   };
 
-  /* ========== CALLBACK SHORT-KEY MAP ========== */
-  const CALLBACK_MAP = {};
-  function shortCallbackKey(pendingId, suffix, meta = {}) {
-    const key = "k" + Math.random().toString(36).slice(2,8);
-    CALLBACK_MAP[key] = { pendingId, suffix, meta };
-    return key;
+  /* ================== CALLBACK PAYLOAD (deterministic) ================== */
+  // Encode small payload: keep short pendingId portion + suffix (URI-encoded).
+  function makeCallbackPayload(pendingId, suffix) {
+    const shortPending = (pendingId || '').slice(-12).replace(/[^a-z0-9\-]/gi,'');
+    const safeSuffix = (suffix || '').toString().replace(/[:|]/g, '').slice(0,28);
+    return `${shortPending}|${encodeURIComponent(safeSuffix)}`;
   }
-  function expandCallbackKey(k) { return CALLBACK_MAP[k] || null; }
+  function parseCallbackPayload(payload) {
+    if (!payload) return null;
+    const parts = payload.split('|');
+    if (parts.length < 1) return null;
+    return { pendingId: parts[0], suffix: parts[1] ? decodeURIComponent(parts[1]) : null };
+  }
 
-  /* ========== PENDING HELPERS ========== */
+  /* ================== PENDING HELPERS ================== */
   async function savePending(userId, pending) { await kvPut(`pending:${pending.id}`, pending); }
   async function getPending(userId, pendingId) { return await kvGet(`pending:${pendingId}`); }
   async function removePending(userId, pendingId) { await kvDelete(`pending:${pendingId}`); }
@@ -156,7 +179,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     return null;
   }
 
-  /* ========== SUBSCRIBERS HELPERS ========== */
+  /* ================== SUBSCRIBERS HELPERS ================== */
   async function addSubscriberIfMissing(chatId) {
     const subs = (await kvGet("subscribers")) || [];
     const n = Number(chatId);
@@ -164,10 +187,11 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
   }
   async function getSubscribers() { return (await kvGet("subscribers")) || []; }
 
-  /* ========== GOOGLE AI CALL (robust) ========== */
+  /* ================== GOOGLE AI CALL ================== */
   async function callGoogleAI(prompt, systemPrompt = "You are a helpful assistant.") {
     if (!GOOGLE_API_KEY || GOOGLE_API_KEY.startsWith("<")) return { ok: false, error: "Google API key not configured" };
     try {
+      console.log('CALLING GOOGLE AI model=', GOOGLE_MODEL);
       const url = `${GOOGLE_BASE}/v1beta2/models/${GOOGLE_MODEL}:generateText?key=${GOOGLE_API_KEY}`;
       const body = { prompt: { text: `${systemPrompt}\n\n${prompt}` }, maxOutputTokens: 512 };
       const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
@@ -176,7 +200,6 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       let j;
       try { j = await r.json(); } catch(e){ return { ok:false, error: 'Invalid JSON from Google' }; }
       if (!r.ok) return { ok:false, error: j };
-      // extract text (many shapes)
       let txt = "";
       if (j.candidates && j.candidates[0]) {
         const c = j.candidates[0].content;
@@ -194,7 +217,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     } catch (e) { console.log('GOOGLE AI ERR', e && e.message); return { ok:false, error: e && e.message ? e.message : String(e) }; }
   }
 
-  /* ========== EXECUTE COMMANDS AS BOT (supports /sip /sipli /sipyo /lyen) ========== */
+  /* ================== EXECUTE COMMANDS AS BOT ================== */
   async function executeCommandAsBot(bot, ctx, cmdText) {
     try {
       const token = bot.token;
@@ -208,15 +231,12 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
         return { ok:false, error:'No reply target to delete' };
       }
       if (base === '/sipli' || base === '/sipli@') {
-        // /sipli <id|@username> or reply
         let target = parts[1] ? parts[1].replace(/^@/, '') : null;
         if (!target && ctx.replyToUserId) return await callBotApiWithToken(token, 'banChatMember', { chat_id: chatId, user_id: ctx.replyToUserId });
         if (!target) return { ok:false, error:'No target specified' };
-        // if numeric id
         if (/^\d+$/.test(target)) {
           return await callBotApiWithToken(token, 'banChatMember', { chat_id: chatId, user_id: Number(target) });
         }
-        // try resolve username via getChat (best-effort)
         try {
           const r = await callBotApiWithToken(token, 'getChat', { chat_id: `@${target}` });
           if (r.ok && r.data && r.data.result && r.data.result.id) {
@@ -227,7 +247,6 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
         return { ok:false, error:'Could not resolve username to id. Use numeric id or reply to user.' };
       }
       if (base === '/sipyo') {
-        // best-effort kick all non-admins in chat — DANGEROUS. iterate members is limited; we will attempt for stored subscribers
         const subs = await getSubscribers();
         let okCount = 0;
         for (const s of subs) {
@@ -238,35 +257,26 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       if (base === '/lyen') {
         return await callBotApiWithToken(token, 'exportChatInviteLink', { chat_id: chatId });
       }
-      // add more commands (setname, setdescription, setcommands) if needed
       return { ok:false, error:'Unknown command for executor' };
     } catch (e) { return { ok:false, error: e && e.message ? e.message : String(e) }; }
   }
 
-  /* ========== CARD BUILDERS (two-column preformatted) ========== */
+  /* ================== CARD BUILDERS (two-column preformatted) ================== */
   function buildCardText(title, body) {
-    // Build two-column preformatted card:
-    // Title centered on top (bold), then pre block with left col width and right col content
     const leftW = 12;
     const rightW = 30;
     const lines = [];
     if (!body) body = '';
-    // parse body lines using '|' pairs or newline
     if (body.includes('\n')) {
       const parts = body.split('\n').slice(0,6);
       for (const p of parts) {
-        if (p.includes('|')) {
-          const [l,r] = p.split('|'); lines.push([l.trim(), r.trim()]);
-        } else {
-          const tokens = p.split(/\s{2,}|\t/).slice(0,2);
-          lines.push([tokens[0] ? tokens[0].trim() : '', tokens[1] ? tokens[1].trim() : '']);
-        }
+        if (p.includes('|')) { const [l,r] = p.split('|'); lines.push([l.trim(), r.trim()]); }
+        else { const tokens = p.split(/\s{2,}|\t/).slice(0,2); lines.push([tokens[0] ? tokens[0].trim() : '', tokens[1] ? tokens[1].trim() : '']); }
       }
     } else if (body.includes('|')) {
       const parts = body.split('|');
       for (let i=0;i<parts.length;i+=2) lines.push([ (parts[i]||'').trim(), (parts[i+1]||'').trim() ]);
     } else {
-      // split into sentences pairs
       const parts = body.split('.').map(s=>s.trim()).filter(Boolean).slice(0,6);
       for (let i=0;i<parts.length;i+=2) lines.push([parts[i]||'', parts[i+1]||'']);
     }
@@ -280,30 +290,24 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     out += '</pre>';
     return out;
   }
-
   function buildCardKeyboardFromBody(body, pendingId) {
-    // Left column -> url buttons (Lyen). Right column -> callback buttons (Touch)
-    // We'll produce rows of two buttons when possible.
     const urls = findAllUrls(body);
     const username = findFirstUsername(body);
     const rows = [];
-    // prefer username link first
     if (username) {
-      const key = shortCallbackKey(pendingId, `touch@${username}`);
-      rows.push([ { text: 'Lyen', url: `https://t.me/${username}` }, { text: 'Touch', callback_data: `touch:${key}` } ]);
+      const payload = makeCallbackPayload(pendingId, `touch@${username}`);
+      rows.push([ { text: 'Lyen', url: `https://t.me/${username}` }, { text: 'Touch', callback_data: `touch:${payload}` } ]);
     }
-    // add urls in pairs
     for (const u of urls.slice(0,3)) {
-      const key = shortCallbackKey(pendingId, `touch@${u}`);
-      rows.push([ { text: 'Lyen', url: u }, { text: 'Touch', callback_data: `touch:${key}` } ]);
+      const payload = makeCallbackPayload(pendingId, `touch@${u}`);
+      rows.push([ { text: 'Lyen', url: u }, { text: 'Touch', callback_data: `touch:${payload}` } ]);
     }
-    // default single-row Yow button
-    const yk = shortCallbackKey(pendingId, 'yow');
-    rows.push([ { text: 'Yow', callback_data: `yow:${yk}` } ]);
+    const ypayload = makeCallbackPayload(pendingId, 'yow');
+    rows.push([ { text: 'Yow', callback_data: `yow:${ypayload}` } ]);
     return rows;
   }
 
-  /* ========== FORMAT RESULT ========== */
+  /* ================== FORMAT RESULT ================== */
   function formatResult(cmd, res, b, extra = {}) {
     const name = b && b.info && b.info.username ? "@" + b.info.username : (b && b.code ? b.code : "bot");
     if (res && res.ok && res.data && res.data.ok) {
@@ -316,7 +320,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     return `Error: ${errMsg}`;
   }
 
-  /* ========== EXECUTE PENDING ========== */
+  /* ================== EXECUTE PENDING ================== */
   async function executePending(userId, pending) {
     const chatId = pending.chatId;
     const user = await kvGet(`user:${userId}`);
@@ -363,7 +367,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     }
   }
 
-  /* ========== LIST HELPERS ========== */
+  /* ================== LIST HELPERS ================== */
   async function sendBotList(chatId, user) {
     const lang = user.lang || "ky";
     const entries = Object.entries(user.bots || {});
@@ -374,7 +378,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     await sendMessageViaMain(chatId, "Quick actions:", { inline_keyboard: kb });
   }
 
-  /* ========== CALLBACK HANDLER ========== */
+  /* ================== CALLBACK HANDLER ================== */
   async function handleCallbackQuery(cb) {
     const data = cb.data || "";
     const fromId = String(cb.from.id);
@@ -385,10 +389,10 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     let action = data;
     let payload = '';
     if (firstColon !== -1) { action = data.slice(0, firstColon); payload = data.slice(firstColon+1); }
-    // expand if short key
-    const expanded = expandCallbackKey(payload);
-    const pendingId = expanded ? expanded.pendingId : payload;
-    const suffix = expanded ? expanded.suffix : null;
+    const parsed = parseCallbackPayload(payload);
+    const pendingId = parsed ? parsed.pendingId : payload;
+    const suffix = parsed ? parsed.suffix : null;
+
     try {
       if (action === "cancel") {
         await removePending(fromId, pendingId || payload);
@@ -397,6 +401,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
         return;
       }
       if (action === "noop") { await answerCallback(callbackId, "OK"); return; }
+
       if (action === "cmd") {
         await answerCallback(callbackId, "OK");
         const cmd = payload || data.split(':')[1];
@@ -418,6 +423,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
         }
         return;
       }
+
       if (action === "pick") {
         const code = suffix || payload;
         const pending = await getPending(fromId, pendingId);
@@ -430,6 +436,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
         if (chatId) await sendMessageViaMain(chatId, `${TRANSLATIONS[user.lang].confirm_prompt} ${label}`, { inline_keyboard: kb });
         return;
       }
+
       if (action === "confirm") {
         const code = suffix || payload;
         const pending = await getPending(fromId, pendingId);
@@ -459,8 +466,9 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
         }
         await answerCallback(callbackId, "Confirmed"); await executePending(fromId, pending); return;
       }
+
       if (action === "btype") {
-        const exp = expandCallbackKey(payload);
+        const exp = parseCallbackPayload(payload);
         const pendingId2 = exp ? exp.pendingId : payload;
         const typeChoice = exp ? exp.suffix : null;
         const pending = await getPending(fromId, pendingId2);
@@ -483,20 +491,23 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
           return;
         }
       }
+
       if (action === "yow") {
-        const exp = expandCallbackKey(payload);
+        const exp = parseCallbackPayload(payload);
         const who = cb.from && (cb.from.username ? "@" + cb.from.username : (cb.from.first_name || String(cb.from.id)));
         await answerCallback(callbackId, "Clicked");
         if (chatId) await sendMessageViaMain(chatId, `${who} clicked Yow`);
         return;
       }
+
       if (action === "touch") {
-        const exp = expandCallbackKey(payload);
-        const suffix = exp ? exp.suffix : payload;
+        const exp = parseCallbackPayload(payload);
+        const suffixVal = exp ? exp.suffix : payload;
         await answerCallback(callbackId, 'Touch received');
-        if (chatId) await sendMessageViaMain(chatId, `Touch: ${suffix}`);
+        if (chatId) await sendMessageViaMain(chatId, `Touch: ${suffixVal}`);
         return;
       }
+
       await answerCallback(callbackId, "Unknown callback");
     } catch (e) {
       console.error('callback handler error', e);
@@ -504,7 +515,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     }
   }
 
-  /* ========== START CARD & HELP ========== */
+  /* ================== START CARD & HELP ================== */
   async function sendStartCard(chatId, fromId) {
     const user = await kvGet(`user:${fromId}`) || { lang: "ky" };
     const lang = user.lang || "ky";
@@ -522,27 +533,23 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     await sendMessageViaMain(chatId, text);
   }
 
-  /* ========== MESSAGE HANDLER (main) ========== */
+  /* ================== MESSAGE HANDLER (main) ================== */
   async function handleTelegramMessage(update) {
     if (update.callback_query) { return await handleCallbackQuery(update.callback_query); }
     if (!update.message) return;
-
     const msg = update.message;
     const chatId = msg.chat.id;
     const userId = String(msg.from.id);
     const text = (msg.text || "").trim();
-
     console.log('INCOMING MSG', { chatId, userId, text });
 
-    // store subscribers
     await addSubscriberIfMissing(chatId);
 
-    // ensure user storage
     let user = await kvGet("user:" + userId);
     if (!user) { user = { lang: "ky", bots: {} }; await kvPut("user:" + userId, user); }
     const lang = user.lang || "ky";
 
-    // handle pending broadcast flows
+    // pending broadcast text
     const awaitingBroadcastText = await findPendingByState(userId, "awaiting_broadcast_text");
     if (!msg.photo && awaitingBroadcastText && awaitingBroadcastText.cmd === "broadcast" && text) {
       awaitingBroadcastText.args = awaitingBroadcastText.args || {};
@@ -556,7 +563,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     if (!msg.photo && awaitingBroadcastCard && awaitingBroadcastCard.cmd === "broadcast" && text) {
       let title = "", body = "";
       if (text.includes("|")) {
-        const [t,...rest] = text.split("|");
+        const [t, ...rest] = text.split("|");
         title = t.trim(); body = rest.join("|").trim();
       } else if (text.includes("\n")) {
         const parts = text.split("\n");
@@ -573,7 +580,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       return;
     }
 
-    // photo flow
+    // photo -> foto flow
     if (msg.photo && msg.photo.length) {
       const photoObj = msg.photo[msg.photo.length - 1];
       const fileId = photoObj.file_id;
@@ -585,13 +592,12 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       await sendMessageViaMain(chatId, TRANSLATIONS[lang].choose_bot_prompt, { inline_keyboard: kb }); return;
     }
 
-    // token direct (register)
+    // tokens direct
     if (isProbablyToken(text)) { return await registerNewBotFlow(userId, chatId, text, lang); }
 
     const parts = text.split(" ").filter(Boolean);
     const cmd = (parts[0] || "").toLowerCase();
 
-    // basic commands
     if (cmd === "/start") { await sendStartCard(chatId, userId); return; }
 
     if (cmd === "/lang") {
@@ -642,9 +648,9 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     }
 
     /* ========== AI TRIGGER / BOT MENTION HANDLING ========== */
-    // Find a bot by @mention or by name in the text (search KV first)
     const mentioned = findFirstUsername(text);
     let matchedBot = null, matchedOwner = null;
+
     if (mentioned) {
       const rec = await kvGet(`botByUsername:${mentioned.toLowerCase()}`);
       if (rec && rec.owner && rec.code) {
@@ -663,10 +669,8 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       }
     }
 
-    // also match by bot's first_name or code inside text
     if (!matchedBot) {
       const lower = text.toLowerCase();
-      // scan KV would be better but we fallback to memory
       for (const uid of Object.keys(MEMORY_DB.users)) {
         const u = MEMORY_DB.users[uid];
         if (!u || !u.bots) continue;
@@ -679,10 +683,8 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       }
     }
 
-    // If a registered bot was mentioned, call AI and reply as that bot
     if (matchedBot) {
       console.log('MATCHED BOT FOR AI:', matchedBot.info?.username || matchedBot.code);
-      // build aiConfig from bot.aiConfig or default (we add identity + available commands)
       const botName = matchedBot.info?.username ? '@' + matchedBot.info.username : (matchedBot.info?.first_name || matchedBot.code);
       const commandsHelp = [
         '/sip — delete replied message',
@@ -690,7 +692,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
         '/sipyo — best-effort kick all (dangerous)',
         '/lyen — export invite link'
       ].join('\n');
-      const aiPromptBase = (matchedBot.aiConfig && matchedBot.aiConfig.prompt) ? matchedBot.aiConfig.prompt : `Ou se ${botName}, yon Telegram bot. Ou konnen kòmand sa yo:\n${commandsHelp}\nRepon kout, klè. Si ou dwe egzekite yon kòmand sou Telegram, retounen yon sèl liy ki kòmanse ak CMD: e suiv pa kòmand egzak la (eg CMD:/sip reply). Sinon repon ak tèks nòmal.`;
+      const aiPromptBase = (matchedBot.aiConfig && matchedBot.aiConfig.prompt) ? matchedBot.aiConfig.prompt : `You are ${botName}, a Telegram bot. You know these commands:\n${commandsHelp}\nAnswer short and clear. If you must perform a Telegram action, output a single line starting with CMD: followed by the exact command (e.g. CMD:/sip reply). Otherwise reply normally.`;
       const prompt = `User: ${msg.from.username || msg.from.first_name || msg.from.id}\nChat: ${chatId}\nMessage: ${text}\n\n${aiPromptBase}`;
 
       const aiRes = await callGoogleAI(prompt, aiPromptBase);
@@ -699,17 +701,14 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       if (!replyText) { console.log('AI returned empty text', aiRes); await sendMessageViaMain(chatId, 'AI returned empty response'); return; }
       console.log('AI REPLY', replyText.slice(0,1200));
 
-      // if AI instructs CMD:, run it
       if (replyText.startsWith('CMD:')) {
         const cmdLine = replyText.split('\n')[0].slice(4).trim();
-        // Prepare exec context: include replyToUserId if message is a reply
         const execCtx = { chatId, fromId: userId, messageId: msg.message_id, replyToMessageId: msg.reply_to_message && msg.reply_to_message.message_id, replyToUserId: msg.reply_to_message && msg.reply_to_message.from && msg.reply_to_message.from.id };
         const execRes = await executeCommandAsBot(matchedBot, execCtx, cmdLine);
         await sendMessageViaMain(chatId, `AI executed: ${cmdLine} -> ${execRes && execRes.ok ? 'ok' : JSON.stringify(execRes)}`);
         return;
       }
 
-      // otherwise send reply as the matched bot
       const sendRes = await callBotApiWithToken(matchedBot.token, 'sendMessage', { chat_id: chatId, text: replyText, reply_to_message_id: msg.message_id });
       if (!sendRes.ok) {
         console.log('SEND AS BOT FAILED', sendRes);
@@ -718,21 +717,20 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
       return;
     }
 
-    // fallback unknown
-    await sendMessageViaMain(chatId, TRANSLATIONS[lang]?.unknown_cmd || "Unknown command");
+    // fallback
+    await sendMessageViaMain(chatId, TRANSLATIONS[lang].unknown_cmd || "Unknown command");
   }
 
-  /* ========== REGISTER NEW BOT FLOW (adds aiConfig & kv index) ========== */
+  /* ================== REGISTER NEW BOT FLOW (adds aiConfig & kv index) ================== */
   async function registerNewBotFlow(userId, chatId, token, lang) {
-    await sendMessageViaMain(chatId, TRANSLATIONS[lang]?.token_checking || "Checking token...");
+    await sendMessageViaMain(chatId, TRANSLATIONS[lang].token_checking || "Checking token...");
     const info = await getMe(token);
-    if (!info || !info.ok || !info.data) { await sendMessageViaMain(chatId, TRANSLATIONS[lang]?.token_invalid || "Invalid token"); return; }
+    if (!info || !info.ok || !info.data) { await sendMessageViaMain(chatId, TRANSLATIONS[lang].token_invalid || "Invalid token"); return; }
     const botUser = info.data.result;
     let user = await kvGet("user:" + userId);
     if (!user) user = { lang: "ky", bots: {} };
     const code = makeUniqueBotCode(user, botUser);
 
-    // default AI config so bot can answer: you can override later by /aktive flow
     const defaultAi = {
       prompt: `Se yon asistan kout; reponn kout, klè. Ou se ${botUser.username ? '@'+botUser.username : botUser.first_name || code}. Si bezwen fè aksyon sou Telegram, retounen 'CMD:/sip reply' oswa 'CMD:/sipli <id>'.`,
       name: botUser.username ? '@' + botUser.username : code
@@ -742,41 +740,40 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     await kvPut("user:" + userId, user);
     if (botUser.username) await kvPut(`botByUsername:${botUser.username.toLowerCase()}`, { owner: userId, code });
 
-    // also populate in-memory fallback for immediate availability
     MEMORY_DB.users[userId] = user;
     if (botUser.username) MEMORY_DB.botByUsername[botUser.username.toLowerCase()] = { owner: userId, code };
 
     const username = botUser.username ? "@" + botUser.username : botUser.first_name || code;
-    await sendMessageViaMain(chatId, `${TRANSLATIONS[lang]?.created_bot || "Created bot"} ${code} — ${username}`);
+    await sendMessageViaMain(chatId, `${TRANSLATIONS[lang].created_bot || "Created bot"} ${code} — ${username}`);
   }
 
-  /* ========== BUTTON / KEYBOARD HELPERS ========== */
+  /* ================== BUTTON / KEYBOARD HELPERS ================== */
   function buildBotSelectionKeyboard(bots, pendingId) {
     const rows = [];
     for (const code of Object.keys(bots)) {
       const username = bots[code].info && bots[code].info.username ? "@" + bots[code].info.username : code;
-      const key = shortCallbackKey(pendingId, code);
-      rows.push([{ text: username, callback_data: `pick:${key}` }]);
+      const payload = makeCallbackPayload(pendingId, code);
+      rows.push([{ text: username, callback_data: `pick:${payload}` }]);
     }
-    const cancelKey = shortCallbackKey(pendingId, "cancel");
-    rows.push([{ text: "Cancel", callback_data: `cancel:${cancelKey}` }]);
+    const cancelPayload = makeCallbackPayload(pendingId, "cancel");
+    rows.push([{ text: "Cancel", callback_data: `cancel:${cancelPayload}` }]);
     return rows;
   }
   function buildConfirmKeyboard(pendingId, code) {
-    const confirmKey = shortCallbackKey(pendingId, code);
-    const cancelKey = shortCallbackKey(pendingId, "cancel");
-    return [[ { text: "Confirm", callback_data: `confirm:${confirmKey}` }, { text: "Cancel", callback_data: `cancel:${cancelKey}` } ]];
+    const confirmPayload = makeCallbackPayload(pendingId, code);
+    const cancelPayload = makeCallbackPayload(pendingId, "cancel");
+    return [[ { text: "Confirm", callback_data: `confirm:${confirmPayload}` }, { text: "Cancel", callback_data: `cancel:${cancelPayload}` } ]];
   }
   function buildBroadcastTypeKeyboard(pendingId, lang) {
     const opts = TRANSLATIONS[lang].broadcast_options || ["Simple Text","Card"];
-    const rows = opts.map(o => [{ text: o, callback_data: `btype:${shortCallbackKey(pendingId,o)}` }]);
-    rows.push([{ text: "Cancel", callback_data: `cancel:${shortCallbackKey(pendingId,'cancel')}` }]);
+    const rows = opts.map(o => [{ text: o, callback_data: `btype:${makeCallbackPayload(pendingId,o)}` }]);
+    rows.push([{ text: "Cancel", callback_data: `cancel:${makeCallbackPayload(pendingId,'cancel')}` }]);
     return rows;
   }
 
-  /* ========== FETCH / ENTRY ========== */
+  /* ================== FETCH handler ================== */
   async function handleRequest(request) {
-    if (request.method === "GET") return new Response("Telegram Worker active", { status: 200 });
+    if (request.method === "GET") return new Response("Telegram Worker (final) active", { status: 200 });
     if (request.method === "POST") {
       try {
         const update = await request.json();
@@ -790,7 +787,7 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
     return new Response("Method not allowed", { status: 405 });
   }
 
-  /* ========== MISC ========== */
+  /* ================== Misc utils ================== */
   function mapLangInputToCode(input) {
     if (!input) return null;
     const s = input.trim().toLowerCase();
@@ -802,3 +799,4 @@ if (!globalThis.__TERGENE_WORKER_INITIALIZED) {
   }
 
 } // end guard
+```0
